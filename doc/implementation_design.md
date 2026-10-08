@@ -130,7 +130,7 @@ flowchart TD
 
 ## 9. GitHub Pagesでの一時公開
 
-GitHub Pages向けのGitHub Actions workflowを`.github/workflows/pages.yml`に追加した。公開先はremote `https://github.com/kanekonaokisu-cyber/proposal_game_v2.git`に基づくプロジェクトページURL:
+GitHub Pages向けのGitHub Actions workflowを`.github/workflows/pages.yml`に追加し、2026-10-08にcommit `f987ad4`として`main`へpushした。公開先はremote `https://github.com/kanekonaokisu-cyber/proposal_game_v2.git`に基づくプロジェクトページURL:
 
 ```text
 https://kanekonaokisu-cyber.github.io/proposal_game_v2/
@@ -144,7 +144,7 @@ workflowは`main`へのpush、またはActions画面からの`workflow_dispatch`
 - `qrUrl()`は`window.location.origin + window.location.pathname + "#/g/" + publicQrId`を生成する。Pages上では上記の公開base pathを使うため、管理画面のQR対応表からコピーしたURLは`https://kanekonaokisu-cyber.github.io/proposal_game_v2/#/g/{id}`の形になる。
 - `qrEntries`の公開IDとhash route形式を変えなければ、同じ公開URL上でQRを再印刷せず継続利用できる。数週間後に公開を停止し、同じユーザー/リポジトリ名とPages設定で再公開する限り、URLは同じままになる。
 - リポジトリ名、GitHubユーザー/組織名、Pagesの公開設定、または独自ドメインを変更するとbase URLが変わり得る。公開後にこれらを変えないこと。
-- これは静的サイトの公開で、GitHub remoteへworkflowをpushし、Pages設定を有効にするまでは未公開。初回Actions成功と実URLの到達確認は未実施。
+- workflowはremoteへpush済みだが、公開URLを確認したところHTTP 404だった。GitHubのリポジトリ設定でPagesのSourceをGitHub Actionsに設定する必要がある可能性がある。Actions実行結果とPages設定は、この環境から認証なしでは確認できていないため、公開完了とは扱わない。
 - 現在のローカルURL（`127.0.0.1:4173`）を既にQRへ印刷している場合、そのQRは公開後のURLへ読み替わらない。印刷前にPagesへ公開し、管理画面のQR対応表から公開URLを取得する必要がある。アプリはQR画像を生成しない。
 
 ### 一時公開の制約

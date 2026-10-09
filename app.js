@@ -18,8 +18,8 @@
     "A82kd91L": { node: "Q2", purpose: "2問目" },
     "xQ7m2Nz4": { node: "Q3", purpose: "3問目" },
     "r5Vn8B2c": { node: "Q4", purpose: "4問目" },
-    "M4pZ7aQ9": { node: "DUMMY1", purpose: "誤答ルート" },
-    "cN6w3Kx8": { node: "DUMMY2", purpose: "誤答ルート" },
+    "M4pZ7aQ9": { node: "DUMMY1", purpose: "誤答ルート問題1" },
+    "cN6w3Kx8": { node: "DUMMY2", purpose: "誤答ルート問題2" },
     "H2dR9sL5": { node: "FINAL", purpose: "最終案内" }
   };
   const defaultQuestions = {
@@ -58,13 +58,33 @@
       nextCorrect: "FINAL",
       nextWrong: "FINAL",
       choices: ["朝はコーヒーより紅茶", "辛い食べ物が苦手", "犬より猫が好き", "地図を読むのが得意"]
+    },
+    DUMMY1: {
+      text: "（問題文を設定してください）",
+      correct: "A",
+      destination: "Q3のQRコードを探してください。",
+      wrongDestination: "Q3のQRコードを探してください。",
+      nextCorrect: "Q3",
+      nextWrong: "Q3",
+      choices: ["選択肢Aを設定してください", "選択肢Bを設定してください", "選択肢Cを設定してください", "選択肢Dを設定してください"]
+    },
+    DUMMY2: {
+      text: "（問題文を設定してください）",
+      correct: "A",
+      destination: "Q4のQRコードを探してください。",
+      wrongDestination: "Q4のQRコードを探してください。",
+      nextCorrect: "Q4",
+      nextWrong: "Q4",
+      choices: ["選択肢Aを設定してください", "選択肢Bを設定してください", "選択肢Cを設定してください", "選択肢Dを設定してください"]
     }
   };
   const wrongRouteOptions = {
     Q1: ["Q2", "DUMMY1"],
     Q2: ["Q3", "DUMMY1"],
     Q3: ["Q4", "DUMMY2"],
-    Q4: ["FINAL"]
+    Q4: ["FINAL"],
+    DUMMY1: ["Q3"],
+    DUMMY2: ["Q4"]
   };
   const routeLabels = {
     Q2: "通常ルート：Q2へ進む",
@@ -74,11 +94,6 @@
     DUMMY1: "誤答ルートQRを経由してQ3へ進む",
     DUMMY2: "誤答ルートQRを経由してQ4へ進む"
   };
-  const dummyNodes = {
-    DUMMY1: { title: "次の手がかり", copy: "この先に、次の手がかりがあるみたいです。", destination: "近くにある次のQRを探してください。", next: "Q3" },
-    DUMMY2: { title: "もうひとつの手がかり", copy: "近くに次のQRがあるようです。", destination: "見つけたら読み取ってください。", next: "Q4" }
-  };
-
   function freshState() {
     return {
       status: "ready",
@@ -99,6 +114,10 @@
     const normalized = {};
     Object.keys(defaultQuestions).forEach(function (node) {
       const question = value[node];
+      if (question === undefined && (node === "DUMMY1" || node === "DUMMY2")) {
+        normalized[node] = { ...defaultQuestions[node] };
+        return;
+      }
       if (!question || typeof question.text !== "string" || !question.text.trim() ||
           !Array.isArray(question.choices) || question.choices.length !== letters.length ||
           question.choices.some(function (choice) { return typeof choice !== "string" || !choice.trim(); }) ||
@@ -113,6 +132,7 @@
         text: question.text.trim(),
         choices: question.choices.map(function (choice) { return choice.trim(); }),
         correct: question.correct,
+        nextCorrect: defaultQuestions[node].nextCorrect,
         nextWrong: question.nextWrong || defaultQuestions[node].nextWrong,
         wrongDestination: typeof question.wrongDestination === "string"
           ? question.wrongDestination.trim()
@@ -227,7 +247,8 @@
       const wrongRoutes = wrongRouteOptions[node].map(function (target) {
         return '<option value="' + target + '" ' + (question.nextWrong === target ? "selected" : "") + ">" + routeLabels[target] + "</option>";
       }).join("");
-      return '<fieldset class="question-settings-card"><legend>' + node + " · 問題 " + (questionIndex + 1) + '</legend>' +
+      const questionLabel = node.indexOf("DUMMY") === 0 ? node + " · 誤答ルート問題" : node + " · 問題 " + (questionIndex + 1);
+      return '<fieldset class="question-settings-card"><legend>' + questionLabel + '</legend>' +
         '<label class="question-field-label" for="question-text-' + node + '">問題文</label>' +
         '<textarea id="question-text-' + node + '" data-question-text="' + node + '" maxlength="500" required>' + escapeHtml(question.text) + '</textarea>' +
         '<div class="question-choices">' + choices + "</div>" +
@@ -238,7 +259,7 @@
         '<label class="question-field-label" for="question-wrong-destination-' + node + '">誤答時に表示する案内文</label>' +
         '<textarea id="question-wrong-destination-' + node + '" data-question-wrong-destination="' + node + '" maxlength="500" required>' + escapeHtml(question.wrongDestination) + "</textarea></fieldset>";
     }).join("");
-    return '<section class="panel admin-panel"><div class="section-heading"><div><h2>クイズの設定</h2><p>問題文・4つの選択肢・正解・誤答後の行き先と案内文を設定します。保存すると全端末の進行状況をリセットして、新しい内容を反映します。</p></div></div>' +
+    return '<section class="panel admin-panel"><div class="section-heading"><div><h2>クイズの設定</h2><p>問題文・4つの選択肢・正解・誤答後の行き先と案内文を設定します。DUMMY1/DUMMY2の誤答ルートQRもクイズとして編集できます。保存すると全端末の進行状況をリセットします。</p></div></div>' +
       renderSettingsNotice() +
       (supabaseClient
         ? '<form id="question-settings-form"><div class="question-settings-grid">' + cards + '</div><button class="primary-button question-save-button" type="submit">設定を保存してゲームをリセット</button><p class="inline-feedback" id="question-settings-feedback" aria-live="polite"></p></form>'
@@ -270,6 +291,17 @@
       updatedQuestions[node].nextWrong = wrongRouteField.value;
       updatedQuestions[node].wrongDestination = wrongDestinationField.value.trim();
     });
+    for (const node of ["DUMMY1", "DUMMY2"]) {
+      const draft = defaultQuestions[node];
+      const question = updatedQuestions[node];
+      if (question.text === draft.text || question.choices.some(function (choice, index) {
+        return choice === draft.choices[index];
+      })) {
+        const feedback = document.getElementById("question-settings-feedback");
+        if (feedback) feedback.textContent = node + "の問題文と4つの選択肢を設定してください。";
+        return;
+      }
+    }
     let validatedQuestions;
     try {
       validatedQuestions = normalizeQuestions(updatedQuestions);
@@ -437,14 +469,6 @@
       "</section></div>";
   }
 
-  function renderDummy(node) {
-    const dummy = dummyNodes[node];
-    return '<div class="player-layout"><section class="panel player-panel">' + sharedMessage() +
-      '<h1 class="player-heading">' + dummy.title + '</h1>' +
-      '<div class="dummy-banner">' + dummy.copy + "</div><p class=\"destination-copy\">" + dummy.destination + "</p>" +
-      "</section></div>";
-  }
-
   function renderFinal() {
     const room = /^\d{4}$/.test(state.roomNumber) ? state.roomNumber : "2807";
     const confirmed = state.finishConfirmed;
@@ -493,7 +517,7 @@
       const image = qrCodeDataUrl(url, 4);
       return '<tr><td><code>' + id + '</code></td><td>' + entry.node + '</td><td>' + entry.purpose + '</td><td class="qr-image-cell"><img class="qr-code-image" src="' + image + '" alt="' + escapeHtml(entry.purpose + "のQRコード") + '" width="128" height="128" loading="lazy"></td><td class="qr-url-cell"><a href="' + url + '" target="_blank" rel="noreferrer">' + escapeHtml(url) + '</a></td><td class="qr-actions"><button class="secondary-button" data-action="copy-qr-image" data-url="' + escapeHtml(url) + '">画像をコピー</button><button class="secondary-button" data-action="copy-qr" data-url="' + escapeHtml(url) + '">URLをコピー</button><a class="secondary-button" href="' + qrUrl(id, true) + '" target="_blank" rel="noreferrer">テスト表示</a><span class="qr-copy-feedback" aria-live="polite"></span></td></tr>';
     }).join("");
-    const rows = ["Q1", "Q2", "Q3", "Q4"].map(function (node) {
+    const rows = ["Q1", "Q2", "DUMMY1", "Q3", "DUMMY2", "Q4"].map(function (node) {
       const answer = answerFor(node);
       if (!answer) return '<tr><td>' + node + '</td><td class="result-pending">未回答</td><td>—</td><td>—</td></tr>';
       return '<tr><td>' + node + '</td><td>' + answer.choice + " · " + escapeHtml(answer.choiceText) + '</td><td class="' + (answer.isCorrect ? "result-correct" : "result-incorrect") + '">' + (answer.isCorrect ? "正解" : "不正解") + '</td><td>' + formatTime(answer.at) + "</td></tr>";
@@ -503,7 +527,7 @@
       '<section class="panel admin-panel"><div class="section-heading"><div><h1>ゲーム進行</h1><p>プレイヤー画面と同じブラウザー保存データを表示しています。</p></div><div class="admin-heading-actions"><span class="status-chip' + statusClass + '">' + statusLabels[state.status] + '</span>' + (adminSession ? '<button class="secondary-button admin-logout-button" data-action="admin-logout">ログアウト</button>' : "") + '</div></div>' +
       '<div><strong>現在のノード：</strong>' + (nodeLabels[current] || current) + '</div>' +
       '<div><strong>次のQR：</strong>' + (state.expectedNode ? nodeLabels[state.expectedNode] : "案内待ち") + '</div>' + progressMarkup(current) +
-      '<p class="progress-caption">回答 ' + state.answers.length + ' / 4 <span>·</span> 経過 ' + elapsed + '</p>' +
+      '<p class="progress-caption">回答 ' + state.answers.length + ' / 6 <span>·</span> 経過 ' + elapsed + '</p>' +
       '<div class="admin-field"><label for="room-number">現在の部屋番号</label><input id="room-number" inputmode="numeric" maxlength="4" value="' + escapeHtml(state.roomNumber) + '" aria-describedby="room-feedback"></div><p class="inline-feedback" id="room-feedback"></p>' +
       '</section>' +
       renderQuestionSettings() +
@@ -563,7 +587,7 @@
         return;
       }
       state.currentNode = route.node;
-      state.expectedNode = dummyNodes[route.node] ? dummyNodes[route.node].next : null;
+      state.expectedNode = null;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     }
     app.innerHTML = renderNode(route.node, false);
@@ -571,7 +595,6 @@
 
   function renderNode(node, preview) {
     if (questions[node]) return renderQuestion(node, preview);
-    if (dummyNodes[node]) return renderDummy(node);
     if (node === "FINAL") return renderFinal();
     return renderUnavailable();
   }

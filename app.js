@@ -176,14 +176,19 @@
     return value ? new Date(value).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "—";
   }
 
+  function renderAdminMessage() {
+    if (!state.message) return "";
+    return '<div class="admin-message" role="status"><div class="admin-message-meta"><span class="admin-message-avatar" aria-hidden="true">管</span><span>管理者からのメッセージ</span></div><div class="admin-message-bubble">' + escapeHtml(state.message) + "</div></div>";
+  }
+
   function sharedMessage() {
     if (state.status === "stopped") {
-      return '<div class="paused-screen"><h2>ゲームは停止中です</h2><p>管理者からの案内をお待ちください。</p>' + (state.message ? '<p class="system-message">' + escapeHtml(state.message) + "</p>" : "") + "</div>";
+      return '<div class="paused-screen"><h2>ゲームは停止中です</h2><p>管理者からの案内をお待ちください。</p>' + renderAdminMessage() + "</div>";
     }
     if (state.status === "paused") {
-      return '<div class="paused-screen"><h2>少しだけお待ちください</h2><p>管理者がゲームを一時停止しています。</p>' + (state.message ? '<p class="system-message">' + escapeHtml(state.message) + "</p>" : "") + "</div>";
+      return '<div class="paused-screen"><h2>少しだけお待ちください</h2><p>管理者がゲームを一時停止しています。</p>' + renderAdminMessage() + "</div>";
     }
-    return state.message ? '<div class="system-message">' + escapeHtml(state.message) + "</div>" : "";
+    return renderAdminMessage();
   }
 
   function renderAlreadyAnswered() {
@@ -249,7 +254,7 @@
     const copy = state.status === "stopped" ? "管理者からの案内をお待ちください。" : "管理者がゲームを一時停止しています。";
     return '<div class="player-layout"><section class="panel player-panel">' +
       '<h1 class="player-heading">' + title + '</h1><p class="player-copy">' + copy + "</p>" +
-      (state.message ? '<div class="system-message">' + escapeHtml(state.message) + "</div>" : "") +
+      renderAdminMessage() +
       "</section></div>";
   }
 
@@ -446,7 +451,6 @@
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...freshState(), roomNumber: roomNumber }));
       state = loadState();
       render();
-      window.location.hash = "/";
     }
   });
 

@@ -186,15 +186,6 @@
     return state.message ? '<div class="system-message">' + escapeHtml(state.message) + "</div>" : "";
   }
 
-  function renderScanPrompt() {
-    const copy = state.status === "finished"
-      ? "ゲームは終了しました。ありがとうございました。"
-      : state.status === "ready"
-        ? "最初の手がかりのQRコードを読み込んでください。"
-        : "案内された場所にある次のQRコードを読み込んでください。";
-    return '<div class="player-layout"><section class="panel player-panel"><p class="player-copy">' + copy + "</p></section></div>";
-  }
-
   function renderAlreadyAnswered() {
     return '<div class="player-layout"><section class="panel player-panel">' +
       '<h1 class="player-heading">この問題には回答済みです。</h1>' +
@@ -329,7 +320,7 @@
       return;
     }
     if (route.node === "START") {
-      app.innerHTML = renderScanPrompt();
+      window.location.replace(window.location.pathname + "#/g/" + qrIdForNode("Q1"));
       return;
     }
     if (!route.node) {

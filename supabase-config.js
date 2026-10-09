@@ -1,4 +1,4 @@
 window.PROPOSAL_GAME_SUPABASE = {
-  url: "",
-  anonKey: ""
+  url: "https://ehjqmhzxcuxuvieusgot.supabase.co",
+  anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVoanFtaHp4Y3V4dXZpZXVzZ290Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE1Mzk4MzgsImV4cCI6MjEwNzExNTgzOH0.z49up9W1EZWvLxbtjX0vPY9B7SpozPpk9M_5AyOT8nI"
 };

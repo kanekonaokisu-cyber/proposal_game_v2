@@ -19,11 +19,12 @@ The GitHub Pages app is static, so `localStorage` alone cannot share settings wi
 
    The Publishable / `anon` key is public by design. Never put a `secret` or `service_role` key in this file.
 6. Commit and deploy `supabase-config.js`. Open `/#/admin` and sign in with the administrator account.
-7. Edit the question text, four answer choices, and correct choice, then select **設定を保存してゲームをリセット**.
+7. Edit the question text, four answer choices, correct choice, and (for incorrect answers) the next QR route and player guidance, then select **設定を保存してゲームをリセット**.
 
 ## Runtime behavior
 
 - All devices read the same question settings. Open player pages check for changes every 10 seconds and when they return to the foreground.
 - Saving settings increments the shared version and resets local game progress on each device when it next syncs. Players should restart from the Q1 QR code.
+- Incorrect-answer routes can use the next normal question or the existing wrong-route QR detour where available. The final question has no later detour. Every answer uses the same answer-result screen; the selected route and its guidance determine which QR the player should find next.
 - Question settings are shared; individual answer progress remains local to each device.
 - The `anon` role can only read the settings row. Only the administrator UUID configured in the RLS policies can insert or update it. Keep Supabase email signups disabled and create only the administrator account.

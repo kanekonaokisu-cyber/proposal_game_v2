@@ -36,6 +36,7 @@
       text: "次のうち、僕たちが実際に行った場所はどれ？",
       correct: "C",
       destination: "次の目的地にあるQRを探してください。",
+      wrongDestination: "次の目的地にあるQRを探してください。",
       nextCorrect: "Q3",
       nextWrong: "Q3",
       choices: ["金沢", "函館", "鎌倉", "松本"]
@@ -53,10 +54,25 @@
       text: "次のうち、僕について正しいものはどれ？",
       correct: "A",
       destination: "最後のQRがある場所へ進んでください。",
+      wrongDestination: "最後のQRがある場所へ進んでください。",
       nextCorrect: "FINAL",
       nextWrong: "FINAL",
       choices: ["朝はコーヒーより紅茶", "辛い食べ物が苦手", "犬より猫が好き", "地図を読むのが得意"]
     }
+  };
+  const wrongRouteOptions = {
+    Q1: ["Q2", "DUMMY1"],
+    Q2: ["Q3", "DUMMY1"],
+    Q3: ["Q4", "DUMMY2"],
+    Q4: ["FINAL"]
+  };
+  const routeLabels = {
+    Q2: "通常ルート：Q2へ進む",
+    Q3: "通常ルート：Q3へ進む",
+    Q4: "通常ルート：Q4へ進む",
+    FINAL: "通常ルート：最終QRへ進む",
+    DUMMY1: "誤答ルートQRを経由してQ3へ進む",
+    DUMMY2: "誤答ルートQRを経由してQ4へ進む"
   };
   const dummyNodes = {
     DUMMY1: { title: "次の手がかり", copy: "この先に、次の手がかりがあるみたいです。", destination: "近くにある次のQRを探してください。", next: "Q3" },
@@ -86,14 +102,21 @@
       if (!question || typeof question.text !== "string" || !question.text.trim() ||
           !Array.isArray(question.choices) || question.choices.length !== letters.length ||
           question.choices.some(function (choice) { return typeof choice !== "string" || !choice.trim(); }) ||
-          !letters.includes(question.correct)) {
+          !letters.includes(question.correct) ||
+          (question.nextWrong !== undefined && !wrongRouteOptions[node].includes(question.nextWrong)) ||
+          (question.wrongDestination !== undefined &&
+            (typeof question.wrongDestination !== "string" || !question.wrongDestination.trim()))) {
         throw new Error(node + "の問題文・4つの選択肢・正解を確認してください。");
       }
       normalized[node] = {
         ...defaultQuestions[node],
         text: question.text.trim(),
         choices: question.choices.map(function (choice) { return choice.trim(); }),
-        correct: question.correct
+        correct: question.correct,
+        nextWrong: question.nextWrong || defaultQuestions[node].nextWrong,
+        wrongDestination: typeof question.wrongDestination === "string"
+          ? question.wrongDestination.trim()
+          : defaultQuestions[node].wrongDestination
       };
     });
     return normalized;
@@ -201,14 +224,21 @@
       const answers = letters.map(function (letter) {
         return '<option value="' + letter + '" ' + (question.correct === letter ? "selected" : "") + ">" + letter + "</option>";
       }).join("");
+      const wrongRoutes = wrongRouteOptions[node].map(function (target) {
+        return '<option value="' + target + '" ' + (question.nextWrong === target ? "selected" : "") + ">" + routeLabels[target] + "</option>";
+      }).join("");
       return '<fieldset class="question-settings-card"><legend>' + node + " · 問題 " + (questionIndex + 1) + '</legend>' +
         '<label class="question-field-label" for="question-text-' + node + '">問題文</label>' +
         '<textarea id="question-text-' + node + '" data-question-text="' + node + '" maxlength="500" required>' + escapeHtml(question.text) + '</textarea>' +
         '<div class="question-choices">' + choices + "</div>" +
         '<label class="question-field-label" for="question-correct-' + node + '">正解の選択肢</label>' +
-        '<select id="question-correct-' + node + '" data-question-correct="' + node + '">' + answers + "</select></fieldset>";
+        '<select id="question-correct-' + node + '" data-question-correct="' + node + '">' + answers + "</select>" +
+        '<label class="question-field-label" for="question-wrong-route-' + node + '">誤答したときの行き先</label>' +
+        '<select id="question-wrong-route-' + node + '" data-question-wrong-route="' + node + '">' + wrongRoutes + "</select>" +
+        '<label class="question-field-label" for="question-wrong-destination-' + node + '">誤答時に表示する案内文</label>' +
+        '<textarea id="question-wrong-destination-' + node + '" data-question-wrong-destination="' + node + '" maxlength="500" required>' + escapeHtml(question.wrongDestination) + "</textarea></fieldset>";
     }).join("");
-    return '<section class="panel admin-panel"><div class="section-heading"><div><h2>クイズの設定</h2><p>問題文・4つの選択肢・正解を設定します。保存すると全端末の進行状況をリセットして、新しい内容を反映します。</p></div></div>' +
+    return '<section class="panel admin-panel"><div class="section-heading"><div><h2>クイズの設定</h2><p>問題文・4つの選択肢・正解・誤答後の行き先と案内文を設定します。保存すると全端末の進行状況をリセットして、新しい内容を反映します。</p></div></div>' +
       renderSettingsNotice() +
       (supabaseClient
         ? '<form id="question-settings-form"><div class="question-settings-grid">' + cards + '</div><button class="primary-button question-save-button" type="submit">設定を保存してゲームをリセット</button><p class="inline-feedback" id="question-settings-feedback" aria-live="polite"></p></form>'
@@ -228,6 +258,8 @@
     Object.keys(defaultQuestions).forEach(function (node) {
       const textField = form.querySelector('[data-question-text="' + node + '"]');
       const correctField = form.querySelector('[data-question-correct="' + node + '"]');
+      const wrongRouteField = form.querySelector('[data-question-wrong-route="' + node + '"]');
+      const wrongDestinationField = form.querySelector('[data-question-wrong-destination="' + node + '"]');
       const choices = letters.map(function (letter) {
         const field = form.querySelector('[data-question-choice="' + node + '"][data-choice-letter="' + letter + '"]');
         return field.value.trim();
@@ -235,6 +267,8 @@
       updatedQuestions[node].text = textField.value.trim();
       updatedQuestions[node].choices = choices;
       updatedQuestions[node].correct = correctField.value;
+      updatedQuestions[node].nextWrong = wrongRouteField.value;
+      updatedQuestions[node].wrongDestination = wrongDestinationField.value.trim();
     });
     let validatedQuestions;
     try {

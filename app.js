@@ -278,7 +278,7 @@
       const entry = pair[1];
       const url = qrUrl(id, false);
       const image = qrCodeDataUrl(url, 4);
-      return '<tr><td><code>' + id + '</code></td><td>' + entry.node + '</td><td>' + entry.purpose + '</td><td class="qr-image-cell"><img class="qr-code-image" src="' + image + '" alt="' + escapeHtml(entry.purpose + "のQRコード") + '" width="128" height="128" loading="lazy"></td><td class="qr-url-cell"><a href="' + url + '" target="_blank" rel="noreferrer">' + escapeHtml(url) + '</a></td><td class="qr-actions"><button class="secondary-button" data-action="copy-qr-image" data-url="' + escapeHtml(url) + '">画像をコピー</button><button class="secondary-button" data-action="copy-qr" data-url="' + escapeHtml(url) + '">URLをコピー</button><a class="secondary-button" href="' + qrUrl(id, true) + '" target="_blank" rel="noreferrer">テスト表示</a></td></tr>';
+      return '<tr><td><code>' + id + '</code></td><td>' + entry.node + '</td><td>' + entry.purpose + '</td><td class="qr-image-cell"><img class="qr-code-image" src="' + image + '" alt="' + escapeHtml(entry.purpose + "のQRコード") + '" width="128" height="128" loading="lazy"></td><td class="qr-url-cell"><a href="' + url + '" target="_blank" rel="noreferrer">' + escapeHtml(url) + '</a></td><td class="qr-actions"><button class="secondary-button" data-action="copy-qr-image" data-url="' + escapeHtml(url) + '">画像をコピー</button><button class="secondary-button" data-action="copy-qr" data-url="' + escapeHtml(url) + '">URLをコピー</button><a class="secondary-button" href="' + qrUrl(id, true) + '" target="_blank" rel="noreferrer">テスト表示</a><span class="qr-copy-feedback" aria-live="polite"></span></td></tr>';
     }).join("");
     const rows = ["Q1", "Q2", "Q3", "Q4"].map(function (node) {
       const answer = answerFor(node);
@@ -303,7 +303,6 @@
       '<section class="panel admin-panel"><div class="section-heading"><div><h2>ゲーム操作</h2><p>一時停止とテスト状態のリセット。</p></div></div>' +
       '<div class="admin-actions"><button class="secondary-button" data-action="toggle-pause">' + (state.status === "paused" ? "ゲームを再開" : "ゲームを一時停止") + '</button><button class="danger-button" data-action="stop-game">ゲームを停止</button><button class="secondary-button" data-action="reset-game">最初からやり直す</button></div>' +
       '<p class="admin-note">リセットすると回答履歴・メッセージ・終了状態を初期化します。部屋番号は保持します。</p></section>' +
-      '<p class="inline-feedback" id="qr-feedback" aria-live="polite"></p>' +
       "</aside></div>";
   }
 
@@ -368,7 +367,7 @@
     if (!button) return;
     const action = button.dataset.action;
     if (action === "copy-qr-image") {
-      const feedback = document.getElementById("qr-feedback");
+      const feedback = button.closest("tr").querySelector(".qr-copy-feedback");
       const url = button.dataset.url;
       if (!navigator.clipboard || !navigator.clipboard.write || typeof ClipboardItem === "undefined") {
         if (feedback) feedback.textContent = "このブラウザーは画像コピーに対応していません。QR画像を右クリック（スマートフォンでは長押し）して保存してください。";
@@ -392,7 +391,7 @@
       return;
     }
     if (action === "copy-qr") {
-      const feedback = document.getElementById("qr-feedback");
+      const feedback = button.closest("tr").querySelector(".qr-copy-feedback");
       const url = button.dataset.url;
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(url).then(function () {

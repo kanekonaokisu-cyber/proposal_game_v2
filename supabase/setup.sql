@@ -17,10 +17,10 @@ create policy "Players can read game settings"
 drop policy if exists "Authenticated admins can insert game settings" on public.game_settings;
 create policy "Authenticated admins can insert game settings"
   on public.game_settings for insert to authenticated
-  with check (auth.uid() is not null);
+  with check (auth.uid() = 'REPLACE_WITH_ADMIN_USER_UUID'::uuid);
 
 drop policy if exists "Authenticated admins can update game settings" on public.game_settings;
 create policy "Authenticated admins can update game settings"
   on public.game_settings for update to authenticated
-  using (auth.uid() is not null)
-  with check (auth.uid() is not null);
+  using (auth.uid() = 'REPLACE_WITH_ADMIN_USER_UUID'::uuid)
+  with check (auth.uid() = 'REPLACE_WITH_ADMIN_USER_UUID'::uuid);

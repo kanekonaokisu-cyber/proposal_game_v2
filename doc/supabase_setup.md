@@ -5,9 +5,10 @@ The GitHub Pages app is static, so `localStorage` alone cannot share settings wi
 ## One-time setup
 
 1. Create a Supabase project.
-2. In **SQL Editor**, run [`../supabase/setup.sql`](../supabase/setup.sql).
-3. In **Authentication → Providers → Email**, disable new user signups. Create the one administrator account from the Supabase dashboard; do not add a public registration form.
-4. In **Project Settings → API**, copy the Project URL and the `anon` / publishable key into `supabase-config.js`. Increment the `?v=` value for that script in `index.html` so browsers fetch the configured values:
+2. In **Authentication → Users**, create the one administrator account. In **Authentication → Providers → Email**, disable new user signups. Do not add a public registration form.
+3. In **SQL Editor**, run `select id, email from auth.users;` and copy the administrator's `id` (UUID).
+4. Open [`../supabase/setup.sql`](../supabase/setup.sql), replace each `REPLACE_WITH_ADMIN_USER_UUID` with that UUID, then run the complete SQL file in **SQL Editor**. This limits writes to the one administrator account.
+5. In **Project Settings → API Keys**, copy the **Project URL** and the **Publishable key** (or legacy `anon` key) into `supabase-config.js`. Increment the `?v=` value for that script in `index.html` so browsers fetch the configured values:
 
    ```js
    window.PROPOSAL_GAME_SUPABASE = {
@@ -16,13 +17,13 @@ The GitHub Pages app is static, so `localStorage` alone cannot share settings wi
    };
    ```
 
-   The browser key is public by design. Never put a service-role key in this file.
-5. Commit and deploy `supabase-config.js`. Open `/#/admin` and sign in with the administrator account.
-6. Edit the question text, four answer choices, and correct choice, then select **設定を保存してゲームをリセット**.
+   The Publishable / `anon` key is public by design. Never put a `secret` or `service_role` key in this file.
+6. Commit and deploy `supabase-config.js`. Open `/#/admin` and sign in with the administrator account.
+7. Edit the question text, four answer choices, and correct choice, then select **設定を保存してゲームをリセット**.
 
 ## Runtime behavior
 
 - All devices read the same question settings. Open player pages check for changes every 10 seconds and when they return to the foreground.
 - Saving settings increments the shared version and resets local game progress on each device when it next syncs. Players should restart from the Q1 QR code.
 - Question settings are shared; individual answer progress remains local to each device.
-- The `anon` role can only read the settings row. Only authenticated users can insert or update it. Keep Supabase email signups disabled and create only the administrator account.
+- The `anon` role can only read the settings row. Only the administrator UUID configured in the RLS policies can insert or update it. Keep Supabase email signups disabled and create only the administrator account.

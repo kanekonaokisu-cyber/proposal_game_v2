@@ -10,7 +10,9 @@ The goal is not to create a technically sophisticated puzzle game. The goal is t
 
 Game flow:
 
-START → Q1 → (correct: Q2 / incorrect: DUMMY 1) → Q3 → (correct: Q4 / incorrect: DUMMY 2) → FINAL → 4-digit room number → room → proposal
+Q1 QR → Q1 → (correct: Q2 / incorrect: DUMMY 1) → Q3 → (correct: Q4 / incorrect: DUMMY 2) → FINAL QR → 4-digit room number → room → proposal
+
+The first Q1 QR starts the game directly; there is no separate welcome or start page. Each question QR can be answered only once. Reopening an answered question QR instructs the player to scan the next QR.
 
 Each main question has exactly 4 choices. Exactly 1 is correct. The 3 incorrect choices all lead to the same dummy stage. Dummy stages do not reveal that the player made a mistake and eventually rejoin the main route.
 
@@ -30,7 +32,7 @@ Question topics are intentionally undecided and must be editable. Possible theme
 
 ## 5. QR Code Concept
 
-QR codes identify game nodes rather than embedding question text. Example: QR-START → START, QR-Q2 → Q2, QR-D1 → D1, QR-FINAL → FINAL.
+QR codes identify game nodes rather than embedding question text. Example: QR-Q1 → Q1, QR-Q2 → Q2, QR-D1 → D1, QR-FINAL → FINAL.
 
 QR identity and game content must be separated so that questions and routes can be changed without reprinting QR codes.
 

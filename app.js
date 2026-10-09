@@ -4,7 +4,7 @@
   const STORAGE_KEY = "proposal-game-prototype-v1";
   const letters = ["A", "B", "C", "D"];
   const nodeLabels = {
-    START: "START",
+    START: "QR待ち",
     Q1: "Q1",
     Q2: "Q2",
     Q3: "Q3",
@@ -89,6 +89,7 @@
 
   let state = loadState();
   const app = document.getElementById("app");
+  let answeredOnThisPage = null;
 
   function saveState(mutator) {
     const next = loadState();
@@ -151,7 +152,7 @@
   }
 
   function routeInfo() {
-    const route = (window.location.hash || "#/game/start").slice(1);
+    const route = (window.location.hash || "#/").slice(1);
     if (route === "/admin") return { admin: true };
     const match = route.match(/^\/g\/([A-Za-z0-9]{8})(\?preview=1)?$/);
     if (match) {
@@ -185,16 +186,19 @@
     return state.message ? '<div class="system-message">' + escapeHtml(state.message) + "</div>" : "";
   }
 
-  function renderStart() {
-    if (state.status !== "ready") {
-      const title = state.status === "finished" ? "ゲームは終了しました。" : "ゲームは進行中です。";
-      const copy = state.status === "finished" ? "ありがとうございました。" : "表示された案内にそって、次の手がかりを探してください。";
-      return '<div class="player-layout"><section class="panel player-panel"><h1 class="player-heading">' + title + '</h1><p class="player-copy">' + copy + "</p></section></div>";
-    }
+  function renderScanPrompt() {
+    const copy = state.status === "finished"
+      ? "ゲームは終了しました。ありがとうございました。"
+      : state.status === "ready"
+        ? "最初の手がかりのQRコードを読み込んでください。"
+        : "案内された場所にある次のQRコードを読み込んでください。";
+    return '<div class="player-layout"><section class="panel player-panel"><p class="player-copy">' + copy + "</p></section></div>";
+  }
+
+  function renderAlreadyAnswered() {
     return '<div class="player-layout"><section class="panel player-panel">' +
-      '<h1 class="player-heading">大切な人のこと、<br>どれくらい知ってる？</h1>' +
-      '<p class="player-copy">手がかりを探しながら、ひとつずつ答えてください。</p>' +
-      '<button class="primary-button start-button" data-action="start">はじめる</button>' +
+      '<h1 class="player-heading">この問題には回答済みです。</h1>' +
+      '<p class="player-copy">案内された場所にある次のQRコードを読み込んでください。</p>' +
       "</section></div>";
   }
 
@@ -215,6 +219,17 @@
     return '<div class="player-layout"><section class="panel player-panel">' + sharedMessage() +
       '<h1 class="player-heading">' + escapeHtml(question.text) + '</h1>' +
       '<ul class="choice-list">' + choices + "</ul>" + result +
+      "</section></div>";
+  }
+
+  function renderAnswerResult(node) {
+    const question = questions[node];
+    const answer = answerFor(node);
+    const destination = answer.nextNode === (question.nextWrong || "") && !answer.isCorrect
+      ? (question.wrongDestination || question.destination)
+      : question.destination;
+    return '<div class="player-layout"><section class="panel player-panel">' + sharedMessage() +
+      '<div class="answer-result"><h1>回答を受け取りました。</h1><p>次の手がかりを探してください。</p><p>' + escapeHtml(destination) + "</p></div>" +
       "</section></div>";
   }
 
@@ -314,7 +329,7 @@
       return;
     }
     if (route.node === "START") {
-      app.innerHTML = renderStart();
+      app.innerHTML = renderScanPrompt();
       return;
     }
     if (!route.node) {
@@ -324,6 +339,19 @@
     if (route.preview) {
       app.innerHTML = renderNode(route.node, true);
       return;
+    }
+    if (questions[route.node] && answerFor(route.node)) {
+      app.innerHTML = answeredOnThisPage === route.node
+        ? renderAnswerResult(route.node)
+        : renderAlreadyAnswered();
+      return;
+    }
+    if (state.status === "ready" && route.node === "Q1") {
+      state.status = "active";
+      state.currentNode = "Q1";
+      state.expectedNode = null;
+      state.startedAt = state.startedAt || Date.now();
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     }
     if (route.node !== state.currentNode) {
       if (route.node !== state.expectedNode) {
@@ -384,27 +412,20 @@
       }
       return;
     }
-    if (["start", "answer", "confirm-final"].includes(action) && ["paused", "stopped", "finished"].includes(state.status)) return;
+    if (["answer", "confirm-final"].includes(action) && ["paused", "stopped", "finished"].includes(state.status)) return;
 
-    if (action === "start") {
-      saveState(function (current) {
-        current.status = "active";
-        current.startedAt = current.startedAt || Date.now();
-        current.stoppedAt = null;
-        current.finishConfirmed = false;
-        current.expectedNode = "Q1";
-      });
-      window.location.hash = "/g/" + qrIdForNode("Q1");
-    } else if (action === "answer") {
+    if (action === "answer") {
       const questionId = button.dataset.question;
       const choice = button.dataset.choice;
       const question = questions[questionId];
       const route = routeInfo();
+      state = loadState();
       if (route.preview || !question || route.node !== state.currentNode || answerFor(questionId)) return;
       const index = letters.indexOf(choice);
       if (index < 0) return;
       const isCorrect = choice === question.correct;
       const nextNode = isCorrect ? question.nextCorrect : question.nextWrong;
+      answeredOnThisPage = questionId;
       saveState(function (current) {
         current.status = "active";
         current.expectedNode = nextNode;
@@ -454,6 +475,7 @@
   });
 
   window.addEventListener("hashchange", function () {
+    answeredOnThisPage = null;
     render();
   });
   window.addEventListener("storage", function (event) {

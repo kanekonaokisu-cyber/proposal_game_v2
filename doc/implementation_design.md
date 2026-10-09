@@ -1,6 +1,6 @@
 # 実装仕様
 
-> この文書は2026-10-08時点の実装を記録する。ゲームの意図・要求は [`proposal_game_design_concept.md`](proposal_game_design_concept.md) を参照する。コード、ルーティング、画面、データ、実行方法、デプロイ設定を変更した場合は、同じ作業で本書も更新し、両者の一致を確認する。
+> この文書は2026-10-09時点の実装を記録する。ゲームの意図・要求は [`proposal_game_design_concept.md`](proposal_game_design_concept.md) を参照する。コード、ルーティング、画面、データ、実行方法、デプロイ設定を変更した場合は、同じ作業で本書も更新し、両者の一致を確認する。
 
 ## 1. 概要
 
@@ -9,7 +9,7 @@
 - プレイヤー画面は問題、4択、回答受領、行き先案内、DUMMY案内、FINALの内容に絞る。
 - 管理画面は回答の選択と正誤、進行、部屋番号、メッセージ、停止・一時停止・リセット、QR対応表を扱う。
 - HTML/CSS/JavaScriptのみで動作し、ゲーム状態は同一オリジンの`localStorage`に保存する。
-- 認証、サーバーAPI、外部DB、実際のQR生成・読取、端末間通信はない。
+- 認証、サーバーAPI、外部DB、QRカメラ読取、端末間通信はない。QR生成はブラウザー内で行う。
 
 ## 2. ファイルと実行構成
 
@@ -18,6 +18,7 @@
 | `index.html`                  | ブランド表示、管理者リンク、描画領域、CSS/JS読み込み。                      |
 | `app.js`                      | 問題・QRデータ、ルート解析、進行状態、画面描画、プレイヤー/管理者イベント。 |
 | `styles.css`                  | プレイヤーと管理者の表示、既存配色、モバイル用レイアウト。                  |
+| `vendor/qrcode-generator.js` | MITライセンスのローカルQR生成ライブラリ。                                  |
 | `server.js`                   | Node.js標準HTTPモジュールによる静的ファイル配信。ゲーム状態を扱わない。     |
 | `.github/workflows/pages.yml` | `main`へのpushまたは手動実行でGitHub Pagesへ静的ファイルを配信する。        |
 
@@ -136,7 +137,7 @@ GitHub Pages向けのGitHub Actions workflowを`.github/workflows/pages.yml`に�
 https://kanekonaokisu-cyber.github.io/proposal_game_v2/
 ```
 
-workflowは`main`へのpush、またはActions画面からの`workflow_dispatch`で起動する。GitHub ActionsでPagesを配信できるよう、リポジトリの **Settings > Pages > Build and deployment > Source** を **GitHub Actions** に設定する。workflowはcheckout後、`index.html`、`app.js`、`styles.css`だけをartifactへステージしてPagesへdeployする。`server.js`、`.vscode`、設計文書はサイトartifactに含めない。
+workflowは`main`へのpush、またはActions画面からの`workflow_dispatch`で起動する。初回実行前にリポジトリの **Settings > Pages > Build and deployment > Source** を **GitHub Actions** に設定し、Pagesサイトを有効化する必要がある。workflowの`actions/configure-pages@v5`は既存サイトの設定を読み取るだけ（`enablement: false`）で、サイトの初回有効化は行わない。workflowはcheckout後、`index.html`、`app.js`、`styles.css`、`vendor/qrcode-generator.js`をartifactへステージしてPagesへdeployする。`server.js`、`.vscode`、設計文書はサイトartifactに含めない。
 
 ### 公開URLとQR
 
@@ -144,7 +145,7 @@ workflowは`main`へのpush、またはActions画面からの`workflow_dispatch`
 - `qrUrl()`は`window.location.origin + window.location.pathname + "#/g/" + publicQrId`を生成する。Pages上では上記の公開base pathを使うため、管理画面のQR対応表からコピーしたURLは`https://kanekonaokisu-cyber.github.io/proposal_game_v2/#/g/{id}`の形になる。
 - `qrEntries`の公開IDとhash route形式を変えなければ、同じ公開URL上でQRを再印刷せず継続利用できる。数週間後に公開を停止し、同じユーザー/リポジトリ名とPages設定で再公開する限り、URLは同じままになる。
 - リポジトリ名、GitHubユーザー/組織名、Pagesの公開設定、または独自ドメインを変更するとbase URLが変わり得る。公開後にこれらを変えないこと。
-- workflowはremoteへpush済みだが、公開URLを確認したところHTTP 404だった。GitHubのリポジトリ設定でPagesのSourceをGitHub Actionsに設定する必要がある可能性がある。Actions実行結果とPages設定は、この環境から認証なしでは確認できていないため、公開完了とは扱わない。
+- 2026-10-09にリポジトリをPublicへ変更し、**Settings > Pages > Build and deployment > Source** を **GitHub Actions** に設定した。10-08の初回workflow実行2回は、Pagesサイト未有効化により`Configure Pages`がPages APIの`404 Not Found`で失敗していた。設定後にworkflow run #3を手動実行し、全stepの成功を確認。公開URLもHTTP 200相当のページ内容を返し、デプロイ済み。Publicリポジトリのため、ソースコード、設計文書、Actionsの実行履歴とログは誰でも閲覧でき、リポジトリをforkできる。
 - 現在のローカルURL（`127.0.0.1:4173`）を既にQRへ印刷している場合、そのQRは公開後のURLへ読み替わらない。印刷前にPagesへ公開し、管理画面のQR対応表から公開URLを取得する必要がある。アプリはQR画像を生成しない。
 
 ### 一時公開の制約
@@ -177,5 +178,6 @@ workflowは`main`へのpush、またはActions画面からの`workflow_dispatch`
 
 - 回答直後にURLが次QRへ変わらず、次ノードの問題も表示されない。
 - 期待されていない先のQR URLはブロックされる。現在のQR URLを再読込すると現在ノードを再表示する。
-- 管理画面に7件の公開ID・内部ノード・用途・URLが揃い、コピーと状態非変更プレビューを確認できる。
+- 管理画面に7件の公開ID・内部ノード・用途・QR画像・URLが揃い、画像/URLコピーと状態非変更プレビューを確認できる。
+- QR画像はブラウザー内で生成し、外部サービスへURLを送信しない。管理画面からクリップボードへPNG画像をコピーでき、非対応ブラウザーでは画像を右クリック/長押しして保存する。
 - プレイヤー画面に管理画面リンク、テストリンク、内部進行情報、開発用ラベルがない。

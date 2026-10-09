@@ -107,6 +107,49 @@
     return window.location.origin + window.location.pathname + "#/g/" + id + (preview ? "?preview=1" : "");
   }
 
+  function qrCodeDataUrl(url, cellSize) {
+    const code = qrcode(0, "M");
+    code.addData(url);
+    code.make();
+    return code.createDataURL(cellSize, 4);
+  }
+
+  function qrCodePng(url) {
+    return new Promise(function (resolve, reject) {
+      const code = qrcode(0, "M");
+      code.addData(url);
+      code.make();
+      const margin = 4;
+      const cellSize = 8;
+      const size = (code.getModuleCount() + margin * 2) * cellSize;
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      const context = canvas.getContext("2d");
+      if (!context) {
+        reject(new Error("QR画像をPNGに変換できません。"));
+        return;
+      }
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, size, size);
+      context.fillStyle = "#000000";
+      for (let row = 0; row < code.getModuleCount(); row += 1) {
+        for (let col = 0; col < code.getModuleCount(); col += 1) {
+          if (code.isDark(row, col)) {
+            context.fillRect((col + margin) * cellSize, (row + margin) * cellSize, cellSize, cellSize);
+          }
+        }
+      }
+      canvas.toBlob(function (blob) {
+        if (blob) {
+          resolve(blob);
+        } else {
+          reject(new Error("QR画像をPNGに変換できません。"));
+        }
+      }, "image/png");
+    });
+  }
+
   function routeInfo() {
     const route = (window.location.hash || "#/game/start").slice(1);
     if (route === "/admin") return { admin: true };
@@ -228,7 +271,8 @@
       const id = pair[0];
       const entry = pair[1];
       const url = qrUrl(id, false);
-      return '<tr><td><code>' + id + '</code></td><td>' + entry.node + '</td><td>' + entry.purpose + '</td><td class="qr-url-cell"><a href="' + url + '" target="_blank" rel="noreferrer">' + escapeHtml(url) + '</a></td><td class="qr-actions"><button class="secondary-button" data-action="copy-qr" data-url="' + escapeHtml(url) + '">URLをコピー</button><a class="secondary-button" href="' + qrUrl(id, true) + '" target="_blank" rel="noreferrer">テスト表示</a></td></tr>';
+      const image = qrCodeDataUrl(url, 4);
+      return '<tr><td><code>' + id + '</code></td><td>' + entry.node + '</td><td>' + entry.purpose + '</td><td class="qr-image-cell"><img class="qr-code-image" src="' + image + '" alt="' + escapeHtml(entry.purpose + "のQRコード") + '" width="128" height="128" loading="lazy"></td><td class="qr-url-cell"><a href="' + url + '" target="_blank" rel="noreferrer">' + escapeHtml(url) + '</a></td><td class="qr-actions"><button class="secondary-button" data-action="copy-qr-image" data-url="' + escapeHtml(url) + '">画像をコピー</button><button class="secondary-button" data-action="copy-qr" data-url="' + escapeHtml(url) + '">URLをコピー</button><a class="secondary-button" href="' + qrUrl(id, true) + '" target="_blank" rel="noreferrer">テスト表示</a></td></tr>';
     }).join("");
     const rows = ["Q1", "Q2", "Q3", "Q4"].map(function (node) {
       const answer = answerFor(node);
@@ -245,8 +289,8 @@
       '</section>' +
       '<section class="panel admin-panel"><div class="section-heading"><div><h2>回答履歴</h2><p>選択内容と正誤は管理画面だけに表示されます。</p></div></div>' +
       '<div class="answer-table-wrap"><table class="answer-table"><thead><tr><th>問題</th><th>選択</th><th>判定</th><th>時刻</th></tr></thead><tbody>' + rows + "</tbody></table></div></section>" +
-      '<section class="panel admin-panel"><div class="section-heading"><div><h2>QR対応表</h2><p>公開IDと内部ノードの対応。テスト表示は進行状態を変更しません。</p></div></div>' +
-      '<div class="answer-table-wrap"><table class="answer-table qr-table"><thead><tr><th>QR識別子</th><th>内部ノード</th><th>用途</th><th>URL</th><th>操作</th></tr></thead><tbody>' + qrRows + "</tbody></table></div></section>" +
+      '<section class="panel admin-panel"><div class="section-heading"><div><h2>QR対応表</h2><p>画像を右クリック（スマートフォンでは長押し）して保存するか、「画像をコピー」で画像をコピーできます。テスト表示は進行状態を変更しません。</p></div></div>' +
+      '<div class="answer-table-wrap"><table class="answer-table qr-table"><thead><tr><th>QR識別子</th><th>内部ノード</th><th>用途</th><th>QR画像</th><th>URL</th><th>操作</th></tr></thead><tbody>' + qrRows + "</tbody></table></div></section>" +
       '</div><aside class="admin-side">' +
       '<section class="panel admin-panel"><div class="section-heading"><div><h2>プレイヤーへの連絡</h2><p>送信するとプレイヤー画面に反映されます。</p></div></div>' +
       '<div class="admin-field"><label for="admin-message">メッセージ</label><textarea id="admin-message" placeholder="例：ゆっくり進んでね。">' + escapeHtml(state.message) + '</textarea></div><div class="admin-actions"><button class="primary-button" data-action="send-message">メッセージを送信</button><button class="secondary-button" data-action="clear-message">表示を消す</button></div><p class="inline-feedback" id="message-feedback"></p></section>' +
@@ -304,6 +348,30 @@
     const button = event.target.closest("button[data-action]");
     if (!button) return;
     const action = button.dataset.action;
+    if (action === "copy-qr-image") {
+      const feedback = document.getElementById("qr-feedback");
+      const url = button.dataset.url;
+      if (!navigator.clipboard || !navigator.clipboard.write || typeof ClipboardItem === "undefined") {
+        if (feedback) feedback.textContent = "このブラウザーは画像コピーに対応していません。QR画像を右クリック（スマートフォンでは長押し）して保存してください。";
+        return;
+      }
+      button.disabled = true;
+      const showCopyError = function (error) {
+        if (feedback) feedback.textContent = "QR画像をコピーできませんでした: " + error.message + " 画像を右クリック（スマートフォンでは長押し）して保存してください。";
+      };
+      const finishCopy = function () {
+        button.disabled = false;
+      };
+      try {
+        navigator.clipboard.write([new ClipboardItem({ "image/png": qrCodePng(url) })]).then(function () {
+          if (feedback) feedback.textContent = "QR画像をコピーしました。";
+        }).catch(showCopyError).then(finishCopy);
+      } catch (error) {
+        showCopyError(error);
+        finishCopy();
+      }
+      return;
+    }
     if (action === "copy-qr") {
       const feedback = document.getElementById("qr-feedback");
       const url = button.dataset.url;

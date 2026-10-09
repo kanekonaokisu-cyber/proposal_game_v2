@@ -113,10 +113,12 @@ a { color: inherit; }
 .answer-table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }
 .answer-table th, .answer-table td { padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
 .answer-table th { color: var(--muted); font-size: 10px; letter-spacing: .04em; }
-.qr-table { min-width: 830px; }
+.qr-table { min-width: 980px; }
+.qr-image-cell { width: 148px; }
+.qr-code-image { display: block; width: 128px; height: 128px; image-rendering: pixelated; }
 .qr-url-cell { max-width: 240px; overflow-wrap: anywhere; }
 .qr-url-cell a { color: var(--green-dark); }
-.qr-actions { min-width: 190px; }
+.qr-actions { min-width: 205px; }
 .qr-actions .secondary-button { display: inline-flex; align-items: center; min-height: 34px; margin: 0 4px 4px 0; padding: 7px 9px; font-size: 10px; text-decoration: none; white-space: nowrap; }
 .answer-table td:first-child { font-weight: 900; }
 .result-correct { color: var(--green); font-weight: 800; }

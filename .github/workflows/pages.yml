@@ -28,8 +28,9 @@ jobs:
         uses: actions/configure-pages@v5
       - name: Stage site files
         run: |
-          mkdir _site
+          mkdir -p _site/vendor
           cp index.html app.js styles.css _site/
+          cp vendor/qrcode-generator.js _site/vendor/
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:

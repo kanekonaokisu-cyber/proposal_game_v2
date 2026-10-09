@@ -22,7 +22,7 @@
     "cN6w3Kx8": { node: "DUMMY2", purpose: "誤答ルート" },
     "H2dR9sL5": { node: "FINAL", purpose: "最終案内" }
   };
-  const questions = {
+  const defaultQuestions = {
     Q1: {
       text: "次のうち、僕の出身地はどれ？",
       correct: "B",
@@ -73,23 +73,63 @@
       message: "",
       startedAt: null,
       stoppedAt: null,
-      finishConfirmed: false
+      finishConfirmed: false,
+      questionSettingsVersion: null
     };
+  }
+
+  function normalizeQuestions(value) {
+    if (!value || typeof value !== "object") throw new Error("共有された問題設定の形式が正しくありません。");
+    const normalized = {};
+    Object.keys(defaultQuestions).forEach(function (node) {
+      const question = value[node];
+      if (!question || typeof question.text !== "string" || !question.text.trim() ||
+          !Array.isArray(question.choices) || question.choices.length !== letters.length ||
+          question.choices.some(function (choice) { return typeof choice !== "string" || !choice.trim(); }) ||
+          !letters.includes(question.correct)) {
+        throw new Error(node + "の問題文・4つの選択肢・正解を確認してください。");
+      }
+      normalized[node] = {
+        ...defaultQuestions[node],
+        text: question.text.trim(),
+        choices: question.choices.map(function (choice) { return choice.trim(); }),
+        correct: question.correct
+      };
+    });
+    return normalized;
+  }
+
+  function cloneDefaultQuestions() {
+    return JSON.parse(JSON.stringify(defaultQuestions));
   }
 
   function loadState() {
     try {
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
       if (!saved || typeof saved !== "object") return freshState();
-      return { ...freshState(), ...saved, answers: Array.isArray(saved.answers) ? saved.answers : [] };
+      return {
+        ...freshState(),
+        ...saved,
+        answers: Array.isArray(saved.answers) ? saved.answers : [],
+        questionSettingsVersion: Number.isInteger(saved.questionSettingsVersion) ? saved.questionSettingsVersion : null
+      };
     } catch (error) {
       return freshState();
     }
   }
 
   let state = loadState();
+  let questions = cloneDefaultQuestions();
   const app = document.getElementById("app");
   let answeredOnThisPage = null;
+  const supabaseConfig = window.PROPOSAL_GAME_SUPABASE || {};
+  const supabaseClient = supabaseConfig.url && supabaseConfig.anonKey && window.supabase
+    ? window.supabase.createClient(supabaseConfig.url, supabaseConfig.anonKey)
+    : null;
+  let adminSession = null;
+  let remoteSettingsVersion = null;
+  let settingsSyncError = "";
+  let settingsSyncInProgress = false;
 
   function saveState(mutator) {
     const next = loadState();
@@ -97,6 +137,134 @@
     state = next;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     render();
+  }
+
+  async function syncQuestionSettings() {
+    if (!supabaseClient || settingsSyncInProgress) return;
+    settingsSyncInProgress = true;
+    try {
+      const result = await supabaseClient.from("game_settings")
+        .select("questions, version")
+        .eq("id", 1)
+        .maybeSingle();
+      if (result.error) throw result.error;
+      if (!result.data) {
+        remoteSettingsVersion = 0;
+        settingsSyncError = "";
+        return;
+      }
+      const version = result.data.version;
+      if (!Number.isInteger(version) || version < 1) {
+        throw new Error("共有設定のバージョン情報が正しくありません。");
+      }
+      const updatedQuestions = normalizeQuestions(result.data.questions);
+      const saved = loadState();
+      const settingsChanged = saved.questionSettingsVersion !== version;
+      questions = updatedQuestions;
+      remoteSettingsVersion = version;
+      settingsSyncError = "";
+      if (settingsChanged) {
+        const hasGameProgress = saved.status !== "ready" || saved.answers.length > 0;
+        const nextState = hasGameProgress
+          ? { ...freshState(), roomNumber: saved.roomNumber, questionSettingsVersion: version }
+          : { ...saved, questionSettingsVersion: version };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
+        state = nextState;
+        if (hasGameProgress) answeredOnThisPage = null;
+        render();
+      }
+    } catch (error) {
+      settingsSyncError = "共有設定を読み込めませんでした: " + error.message;
+      render();
+    } finally {
+      settingsSyncInProgress = false;
+    }
+  }
+
+  function renderSettingsNotice() {
+    if (supabaseConfig.url && supabaseConfig.anonKey && settingsSyncError) {
+      return '<p class="settings-notice is-error" role="alert">' + escapeHtml(settingsSyncError) + "</p>";
+    }
+    if (!supabaseClient) {
+      return '<p class="settings-notice" role="status">別端末へ問題設定を共有するには、supabase-config.js と Supabase の初期設定が必要です。</p>';
+    }
+    return "";
+  }
+
+  function renderQuestionSettings() {
+    const cards = Object.keys(defaultQuestions).map(function (node, questionIndex) {
+      const question = questions[node];
+      const choices = question.choices.map(function (choice, index) {
+        const letter = letters[index];
+        return '<label class="question-choice-field"><span>' + letter + '</span><input type="text" maxlength="200" data-question-choice="' + node + '" data-choice-letter="' + letter + '" value="' + escapeHtml(choice) + '" aria-label="' + node + "の選択肢" + letter + '" required></label>';
+      }).join("");
+      const answers = letters.map(function (letter) {
+        return '<option value="' + letter + '" ' + (question.correct === letter ? "selected" : "") + ">" + letter + "</option>";
+      }).join("");
+      return '<fieldset class="question-settings-card"><legend>' + node + " · 問題 " + (questionIndex + 1) + '</legend>' +
+        '<label class="question-field-label" for="question-text-' + node + '">問題文</label>' +
+        '<textarea id="question-text-' + node + '" data-question-text="' + node + '" maxlength="500" required>' + escapeHtml(question.text) + '</textarea>' +
+        '<div class="question-choices">' + choices + "</div>" +
+        '<label class="question-field-label" for="question-correct-' + node + '">正解の選択肢</label>' +
+        '<select id="question-correct-' + node + '" data-question-correct="' + node + '">' + answers + "</select></fieldset>";
+    }).join("");
+    return '<section class="panel admin-panel"><div class="section-heading"><div><h2>クイズの設定</h2><p>問題文・4つの選択肢・正解を設定します。保存すると全端末の進行状況をリセットして、新しい内容を反映します。</p></div></div>' +
+      renderSettingsNotice() +
+      (supabaseClient
+        ? '<form id="question-settings-form"><div class="question-settings-grid">' + cards + '</div><button class="primary-button question-save-button" type="submit">設定を保存してゲームをリセット</button><p class="inline-feedback" id="question-settings-feedback" aria-live="polite"></p></form>'
+        : '<p class="admin-note">Supabase を設定すると、ここから問題を編集してプレイヤーのスマートフォンにも反映できます。</p>') +
+      "</section>";
+  }
+
+  function renderAdminLogin() {
+    return '<div class="player-layout"><section class="panel player-panel"><h1 class="player-heading">管理者ログイン</h1><p class="player-copy">問題設定とゲーム管理を開くには、管理者アカウントでログインしてください。</p>' +
+      renderSettingsNotice() +
+      '<form id="admin-login-form" class="admin-login-form"><label class="question-field-label" for="admin-email">メールアドレス</label><input id="admin-email" type="email" autocomplete="username" required><label class="question-field-label" for="admin-password">パスワード</label><input id="admin-password" type="password" autocomplete="current-password" required><button class="primary-button" type="submit">ログイン</button></form><p class="inline-feedback" id="admin-login-feedback" aria-live="polite"></p></section></div>';
+  }
+
+  async function saveQuestionSettings(form) {
+    const feedback = document.getElementById("question-settings-feedback");
+    const updatedQuestions = cloneDefaultQuestions();
+    Object.keys(defaultQuestions).forEach(function (node) {
+      const textField = form.querySelector('[data-question-text="' + node + '"]');
+      const correctField = form.querySelector('[data-question-correct="' + node + '"]');
+      const choices = letters.map(function (letter) {
+        const field = form.querySelector('[data-question-choice="' + node + '"][data-choice-letter="' + letter + '"]');
+        return field.value.trim();
+      });
+      updatedQuestions[node].text = textField.value.trim();
+      updatedQuestions[node].choices = choices;
+      updatedQuestions[node].correct = correctField.value;
+    });
+    let validatedQuestions;
+    try {
+      validatedQuestions = normalizeQuestions(updatedQuestions);
+    } catch (error) {
+      if (feedback) feedback.textContent = error.message;
+      return;
+    }
+    if (!supabaseClient || !adminSession) {
+      if (feedback) feedback.textContent = "管理者としてログインしてから保存してください。";
+      return;
+    }
+    const nextVersion = (remoteSettingsVersion || 0) + 1;
+    const result = await supabaseClient.from("game_settings")
+      .upsert({ id: 1, questions: validatedQuestions, version: nextVersion }, { onConflict: "id" })
+      .select("questions, version")
+      .single();
+    if (result.error) {
+      if (feedback) feedback.textContent = "保存できませんでした: " + result.error.message;
+      return;
+    }
+    const roomNumber = loadState().roomNumber;
+    state = { ...freshState(), roomNumber: roomNumber, questionSettingsVersion: result.data.version };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    questions = normalizeQuestions(result.data.questions);
+    remoteSettingsVersion = result.data.version;
+    settingsSyncError = "";
+    render();
+    const savedFeedback = document.getElementById("question-settings-feedback");
+    if (savedFeedback) savedFeedback.textContent = "保存しました。設定を全端末へ反映し、ゲームを最初からに戻しました。プレイヤーはQ1から再開できます。";
   }
 
   function qrIdForNode(node) {
@@ -181,14 +349,20 @@
     return '<div class="admin-message" role="status"><div class="admin-message-meta"><span class="admin-message-avatar" aria-hidden="true">管</span><span>管理者からのメッセージ</span></div><div class="admin-message-bubble">' + escapeHtml(state.message) + "</div></div>";
   }
 
+  function renderSyncError() {
+    return supabaseConfig.url && supabaseConfig.anonKey && settingsSyncError
+      ? '<p class="settings-notice is-error" role="alert">' + escapeHtml(settingsSyncError) + "</p>"
+      : "";
+  }
+
   function sharedMessage() {
     if (state.status === "stopped") {
-      return '<div class="paused-screen"><h2>ゲームは停止中です</h2><p>管理者からの案内をお待ちください。</p>' + renderAdminMessage() + "</div>";
+      return renderSyncError() + '<div class="paused-screen"><h2>ゲームは停止中です</h2><p>管理者からの案内をお待ちください。</p>' + renderAdminMessage() + "</div>";
     }
     if (state.status === "paused") {
-      return '<div class="paused-screen"><h2>少しだけお待ちください</h2><p>管理者がゲームを一時停止しています。</p>' + renderAdminMessage() + "</div>";
+      return renderSyncError() + '<div class="paused-screen"><h2>少しだけお待ちください</h2><p>管理者がゲームを一時停止しています。</p>' + renderAdminMessage() + "</div>";
     }
-    return renderAdminMessage();
+    return renderSyncError() + renderAdminMessage();
   }
 
   function renderAlreadyAnswered() {
@@ -292,12 +466,13 @@
     }).join("");
     const elapsed = state.startedAt ? Math.max(0, Math.floor(((state.stoppedAt || Date.now()) - state.startedAt) / 60000)) + "分" : "—";
     return '<div class="admin-layout"><div class="admin-main">' +
-      '<section class="panel admin-panel"><div class="section-heading"><div><h1>ゲーム進行</h1><p>プレイヤー画面と同じブラウザー保存データを表示しています。</p></div><span class="status-chip' + statusClass + '">' + statusLabels[state.status] + '</span></div>' +
+      '<section class="panel admin-panel"><div class="section-heading"><div><h1>ゲーム進行</h1><p>プレイヤー画面と同じブラウザー保存データを表示しています。</p></div><div class="admin-heading-actions"><span class="status-chip' + statusClass + '">' + statusLabels[state.status] + '</span>' + (adminSession ? '<button class="secondary-button admin-logout-button" data-action="admin-logout">ログアウト</button>' : "") + '</div></div>' +
       '<div><strong>現在のノード：</strong>' + (nodeLabels[current] || current) + '</div>' +
       '<div><strong>次のQR：</strong>' + (state.expectedNode ? nodeLabels[state.expectedNode] : "案内待ち") + '</div>' + progressMarkup(current) +
       '<p class="progress-caption">回答 ' + state.answers.length + ' / 4 <span>·</span> 経過 ' + elapsed + '</p>' +
       '<div class="admin-field"><label for="room-number">現在の部屋番号</label><input id="room-number" inputmode="numeric" maxlength="4" value="' + escapeHtml(state.roomNumber) + '" aria-describedby="room-feedback"></div><p class="inline-feedback" id="room-feedback"></p>' +
       '</section>' +
+      renderQuestionSettings() +
       '<section class="panel admin-panel"><div class="section-heading"><div><h2>回答履歴</h2><p>選択内容と正誤は管理画面だけに表示されます。</p></div></div>' +
       '<div class="answer-table-wrap"><table class="answer-table"><thead><tr><th>問題</th><th>選択</th><th>判定</th><th>時刻</th></tr></thead><tbody>' + rows + "</tbody></table></div></section>" +
       '<section class="panel admin-panel"><div class="section-heading"><div><h2>QR対応表</h2><p>画像を右クリック（スマートフォンでは長押し）して保存するか、「画像をコピー」で画像をコピーできます。テスト表示は進行状態を変更しません。</p></div></div>' +
@@ -316,7 +491,7 @@
     const route = routeInfo();
     document.querySelector(".app-shell").classList.toggle("is-admin", route.admin === true);
     if (route.admin) {
-      app.innerHTML = renderAdmin();
+      app.innerHTML = supabaseClient && !adminSession ? renderAdminLogin() : renderAdmin();
       return;
     }
     if (state.status === "stopped" || state.status === "paused") {
@@ -371,6 +546,18 @@
     const button = event.target.closest("button[data-action]");
     if (!button) return;
     const action = button.dataset.action;
+    if (action === "admin-logout") {
+      if (!supabaseClient) return;
+      supabaseClient.auth.signOut().then(function (result) {
+        if (result.error) throw result.error;
+        adminSession = null;
+        render();
+      }).catch(function (error) {
+        settingsSyncError = "ログアウトできませんでした: " + error.message;
+        render();
+      });
+      return;
+    }
     if (action === "copy-qr-image") {
       const feedback = button.closest("tr").querySelector(".qr-copy-feedback");
       const url = button.dataset.url;
@@ -454,6 +641,32 @@
     }
   });
 
+  app.addEventListener("submit", function (event) {
+    event.preventDefault();
+    if (event.target.id === "admin-login-form") {
+      if (!supabaseClient) return;
+      const feedback = document.getElementById("admin-login-feedback");
+      const email = document.getElementById("admin-email").value.trim();
+      const password = document.getElementById("admin-password").value;
+      supabaseClient.auth.signInWithPassword({ email: email, password: password }).then(function (result) {
+        if (result.error) throw result.error;
+        adminSession = result.data.session;
+        settingsSyncError = "";
+        render();
+      }).catch(function (error) {
+        const currentFeedback = document.getElementById("admin-login-feedback");
+        if (currentFeedback) currentFeedback.textContent = "ログインできませんでした: " + error.message;
+      });
+      return;
+    }
+    if (event.target.id === "question-settings-form") {
+      saveQuestionSettings(event.target).catch(function (error) {
+        const feedback = document.getElementById("question-settings-feedback");
+        if (feedback) feedback.textContent = "保存できませんでした: " + error.message;
+      });
+    }
+  });
+
   app.addEventListener("change", function (event) {
     if (event.target.id !== "room-number") return;
     const value = event.target.value.trim();
@@ -476,5 +689,29 @@
     if (event.key === STORAGE_KEY) render();
   });
 
-  render();
+  async function initialize() {
+    if (supabaseConfig.url && supabaseConfig.anonKey && !window.supabase) {
+      settingsSyncError = "Supabase ライブラリを読み込めませんでした。ネットワーク接続を確認してください。";
+    } else if (supabaseClient) {
+      supabaseClient.auth.onAuthStateChange(function (_event, session) {
+        adminSession = session;
+        if (routeInfo().admin) render();
+      });
+      try {
+        const sessionResult = await supabaseClient.auth.getSession();
+        if (sessionResult.error) throw sessionResult.error;
+        adminSession = sessionResult.data.session;
+      } catch (error) {
+        settingsSyncError = "管理者セッションを確認できませんでした: " + error.message;
+      }
+      await syncQuestionSettings();
+      window.setInterval(syncQuestionSettings, 10000);
+      document.addEventListener("visibilitychange", function () {
+        if (!document.hidden) syncQuestionSettings();
+      });
+    }
+    render();
+  }
+
+  initialize();
 })();

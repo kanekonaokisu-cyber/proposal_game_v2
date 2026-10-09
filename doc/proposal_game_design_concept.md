@@ -10,7 +10,7 @@ The goal is not to create a technically sophisticated puzzle game. The goal is t
 
 Game flow:
 
-Q1 QR → Q1 → (correct: Q2 / incorrect: DUMMY 1) → Q3 → (correct: Q4 / incorrect: DUMMY 2) → FINAL QR → 4-digit room number → room → proposal
+Q1 QR → Q1 → (correct: Q2 / incorrect: DUMMY 1) → Q3 → (correct: Q4 / incorrect: DUMMY 2) → 4-digit room number → room → proposal
 
 The first Q1 QR starts the game directly; there is no separate welcome or start page. Each question QR can be answered only once. Reopening an answered question QR instructs the player to scan the next QR.
 
@@ -74,13 +74,13 @@ Example: room 2807 → digits 2, 8, 0, 7.
 
 ## 11. Final Number Mechanism
 
-Four digits are collected during the game and combined into the room number. Conceptually: Q2 result → digit 1; Q3 result → digit 2; Q4 result → digit 3; FINAL QR → digit 4.
+Four digits are collected during the game and combined into the room number. The final guidance appears immediately after answering Q4 or DUMMY 2; no separate final QR is required.
 
 The physical implementation of where the digits appear is flexible, e.g. a small number written on the back of a QR card. The administrator must be able to change the digits on the day.
 
 ## 12. Final Confirmation
 
-After FINAL, show the assembled room number and ask for confidence, e.g. “あなたが導き出した答えは……2807。この答えに、自信がありますか？”
+After the final guidance appears, show the assembled room number and ask for confidence, e.g. “あなたが導き出した答えは……2807。この答えに、自信がありますか？”
 
 If the result is wrong, the administrator should be able to identify which main question was answered incorrectly and decide how to intervene. Do not automatically reveal the answer.
 

@@ -19,8 +19,7 @@
     "xQ7m2Nz4": { node: "Q3", purpose: "3問目" },
     "r5Vn8B2c": { node: "Q4", purpose: "4問目" },
     "M4pZ7aQ9": { node: "DUMMY1", purpose: "誤答ルート問題1" },
-    "cN6w3Kx8": { node: "DUMMY2", purpose: "誤答ルート問題2" },
-    "H2dR9sL5": { node: "FINAL", purpose: "最終案内" }
+    "cN6w3Kx8": { node: "DUMMY2", purpose: "誤答ルート問題2" }
   };
   const defaultQuestions = {
     Q1: {
@@ -53,8 +52,8 @@
     Q4: {
       text: "次のうち、僕について正しいものはどれ？",
       correct: "A",
-      destination: "最後のQRがある場所へ進んでください。",
-      wrongDestination: "最後のQRがある場所へ進んでください。",
+      destination: "最終案内を確認してください。",
+      wrongDestination: "最終案内を確認してください。",
       nextCorrect: "FINAL",
       nextWrong: "FINAL",
       choices: ["朝はコーヒーより紅茶", "辛い食べ物が苦手", "犬より猫が好き", "地図を読むのが得意"]
@@ -71,10 +70,10 @@
     DUMMY2: {
       text: "（問題文を設定してください）",
       correct: "A",
-      destination: "Q4のQRコードを探してください。",
-      wrongDestination: "Q4のQRコードを探してください。",
-      nextCorrect: "Q4",
-      nextWrong: "Q4",
+      destination: "最終案内を確認してください。",
+      wrongDestination: "最終案内を確認してください。",
+      nextCorrect: "FINAL",
+      nextWrong: "FINAL",
       choices: ["選択肢Aを設定してください", "選択肢Bを設定してください", "選択肢Cを設定してください", "選択肢Dを設定してください"]
     }
   };
@@ -84,15 +83,15 @@
     Q3: ["Q4", "DUMMY2"],
     Q4: ["FINAL"],
     DUMMY1: ["Q3"],
-    DUMMY2: ["Q4"]
+    DUMMY2: ["FINAL"]
   };
   const routeLabels = {
     Q2: "通常ルート：Q2へ進む",
     Q3: "通常ルート：Q3へ進む",
-    Q4: "通常ルート：Q4へ進む",
-    FINAL: "通常ルート：最終QRへ進む",
+    Q4: "Q4へ進む",
+    FINAL: "回答後に最終案内を表示",
     DUMMY1: "誤答ルートQRを経由してQ3へ進む",
-    DUMMY2: "誤答ルートQRを経由してQ4へ進む"
+    DUMMY2: "誤答ルートQRを経由して問題を表示"
   };
   function freshState() {
     return {
@@ -118,12 +117,18 @@
         normalized[node] = { ...defaultQuestions[node] };
         return;
       }
+      const nextCorrect = node === "DUMMY2" && question && question.nextCorrect === "Q4"
+        ? "FINAL"
+        : question && question.nextCorrect;
+      const nextWrong = node === "DUMMY2" && question && question.nextWrong === "Q4"
+        ? "FINAL"
+        : question && question.nextWrong;
       if (!question || typeof question.text !== "string" || !question.text.trim() ||
           !Array.isArray(question.choices) || question.choices.length !== letters.length ||
           question.choices.some(function (choice) { return typeof choice !== "string" || !choice.trim(); }) ||
           !letters.includes(question.correct) ||
-          (question.nextCorrect !== undefined && !routeOptions[node].includes(question.nextCorrect)) ||
-          (question.nextWrong !== undefined && !routeOptions[node].includes(question.nextWrong)) ||
+          (nextCorrect !== undefined && !routeOptions[node].includes(nextCorrect)) ||
+          (nextWrong !== undefined && !routeOptions[node].includes(nextWrong)) ||
           (question.destination !== undefined &&
             (typeof question.destination !== "string" || !question.destination.trim())) ||
           (question.wrongDestination !== undefined &&
@@ -135,8 +140,8 @@
         text: question.text.trim(),
         choices: question.choices.map(function (choice) { return choice.trim(); }),
         correct: question.correct,
-        nextCorrect: question.nextCorrect || defaultQuestions[node].nextCorrect,
-        nextWrong: question.nextWrong || defaultQuestions[node].nextWrong,
+        nextCorrect: nextCorrect || defaultQuestions[node].nextCorrect,
+        nextWrong: nextWrong || defaultQuestions[node].nextWrong,
         destination: typeof question.destination === "string"
           ? question.destination.trim()
           : defaultQuestions[node].destination,
@@ -251,10 +256,10 @@
         return '<option value="' + letter + '" ' + (question.correct === letter ? "selected" : "") + ">" + letter + "</option>";
       }).join("");
       const correctRoutes = routeOptions[node].map(function (target) {
-        return '<option value="' + target + '" ' + (question.nextCorrect === target ? "selected" : "") + ">" + routeLabels[target] + "</option>";
+        return '<label class="question-route-option"><input type="radio" name="correct-route-' + node + '" value="' + target + '" ' + (question.nextCorrect === target ? "checked" : "") + ' required><span>' + routeLabels[target] + "</span></label>";
       }).join("");
       const wrongRoutes = routeOptions[node].map(function (target) {
-        return '<option value="' + target + '" ' + (question.nextWrong === target ? "selected" : "") + ">" + routeLabels[target] + "</option>";
+        return '<label class="question-route-option"><input type="radio" name="wrong-route-' + node + '" value="' + target + '" ' + (question.nextWrong === target ? "checked" : "") + ' required><span>' + routeLabels[target] + "</span></label>";
       }).join("");
       const questionLabel = node.indexOf("DUMMY") === 0 ? node + " · 誤答ルート問題" : node + " · 問題 " + (questionIndex + 1);
       return '<fieldset class="question-settings-card"><legend>' + questionLabel + '</legend>' +
@@ -263,12 +268,10 @@
         '<div class="question-choices">' + choices + "</div>" +
         '<label class="question-field-label" for="question-correct-' + node + '">正解の選択肢</label>' +
         '<select id="question-correct-' + node + '" data-question-correct="' + node + '">' + answers + "</select>" +
-        '<label class="question-field-label" for="question-correct-route-' + node + '">正解したときの行き先</label>' +
-        '<select id="question-correct-route-' + node + '" data-question-correct-route="' + node + '">' + correctRoutes + "</select>" +
+        '<fieldset class="question-route-group"><legend>正解したときの行き先</legend>' + correctRoutes + "</fieldset>" +
         '<label class="question-field-label" for="question-correct-destination-' + node + '">正解時に表示する案内文</label>' +
         '<textarea id="question-correct-destination-' + node + '" data-question-correct-destination="' + node + '" maxlength="500" required>' + escapeHtml(question.destination) + "</textarea>" +
-        '<label class="question-field-label" for="question-wrong-route-' + node + '">誤答したときの行き先</label>' +
-        '<select id="question-wrong-route-' + node + '" data-question-wrong-route="' + node + '">' + wrongRoutes + "</select>" +
+        '<fieldset class="question-route-group"><legend>誤答したときの行き先</legend>' + wrongRoutes + "</fieldset>" +
         '<label class="question-field-label" for="question-wrong-destination-' + node + '">誤答時に表示する案内文</label>' +
         '<textarea id="question-wrong-destination-' + node + '" data-question-wrong-destination="' + node + '" maxlength="500" required>' + escapeHtml(question.wrongDestination) + "</textarea></fieldset>";
     }).join("");
@@ -289,13 +292,18 @@
   async function saveQuestionSettings(form) {
     const feedback = document.getElementById("question-settings-feedback");
     const updatedQuestions = cloneDefaultQuestions();
+    let missingRouteNode = "";
     Object.keys(defaultQuestions).forEach(function (node) {
       const textField = form.querySelector('[data-question-text="' + node + '"]');
       const correctField = form.querySelector('[data-question-correct="' + node + '"]');
-      const correctRouteField = form.querySelector('[data-question-correct-route="' + node + '"]');
+      const correctRouteField = form.querySelector('input[name="correct-route-' + node + '"]:checked');
       const correctDestinationField = form.querySelector('[data-question-correct-destination="' + node + '"]');
-      const wrongRouteField = form.querySelector('[data-question-wrong-route="' + node + '"]');
+      const wrongRouteField = form.querySelector('input[name="wrong-route-' + node + '"]:checked');
       const wrongDestinationField = form.querySelector('[data-question-wrong-destination="' + node + '"]');
+      if (!correctRouteField || !wrongRouteField) {
+        missingRouteNode = node;
+        return;
+      }
       const choices = letters.map(function (letter) {
         const field = form.querySelector('[data-question-choice="' + node + '"][data-choice-letter="' + letter + '"]');
         return field.value.trim();
@@ -308,6 +316,10 @@
       updatedQuestions[node].nextWrong = wrongRouteField.value;
       updatedQuestions[node].wrongDestination = wrongDestinationField.value.trim();
     });
+    if (missingRouteNode) {
+      if (feedback) feedback.textContent = missingRouteNode + "の正解時・誤答時の行き先を選択してください。";
+      return;
+    }
     for (const node of ["DUMMY1", "DUMMY2"]) {
       const draft = defaultQuestions[node];
       const question = updatedQuestions[node];
@@ -464,9 +476,9 @@
     }).join("");
     let result = "";
     if (existing) {
-      const destination = existing.nextNode === (question.nextWrong || "") && !existing.isCorrect
-        ? (question.wrongDestination || question.destination)
-        : question.destination;
+      const destination = existing.isCorrect
+        ? question.destination
+        : question.wrongDestination;
       result = '<div class="answer-result"><h2>回答を受け取りました。</h2><p>次の手がかりを探してください。</p><p>' + escapeHtml(destination) + "</p></div>";
     }
     return '<div class="player-layout"><section class="panel player-panel">' + sharedMessage() +
@@ -478,9 +490,9 @@
   function renderAnswerResult(node) {
     const question = questions[node];
     const answer = answerFor(node);
-    const destination = answer.nextNode === (question.nextWrong || "") && !answer.isCorrect
-      ? (question.wrongDestination || question.destination)
-      : question.destination;
+    const destination = answer.isCorrect
+      ? question.destination
+      : question.wrongDestination;
     return '<div class="player-layout"><section class="panel player-panel">' + sharedMessage() +
       '<div class="answer-result"><h1>回答を受け取りました。</h1><p>次の手がかりを探してください。</p><p>' + escapeHtml(destination) + "</p></div>" +
       "</section></div>";
@@ -543,7 +555,7 @@
     return '<div class="admin-layout"><div class="admin-main">' +
       '<section class="panel admin-panel"><div class="section-heading"><div><h1>ゲーム進行</h1><p>プレイヤー画面と同じブラウザー保存データを表示しています。</p></div><div class="admin-heading-actions"><span class="status-chip' + statusClass + '">' + statusLabels[state.status] + '</span>' + (adminSession ? '<button class="secondary-button admin-logout-button" data-action="admin-logout">ログアウト</button>' : "") + '</div></div>' +
       '<div><strong>現在のノード：</strong>' + (nodeLabels[current] || current) + '</div>' +
-      '<div><strong>次のQR：</strong>' + (state.expectedNode ? nodeLabels[state.expectedNode] : "案内待ち") + '</div>' + progressMarkup(current) +
+      '<div><strong>次のQR：</strong>' + (state.currentNode === "FINAL" ? "なし（最終案内を表示中）" : state.expectedNode ? nodeLabels[state.expectedNode] : "案内待ち") + '</div>' + progressMarkup(current) +
       '<p class="progress-caption">回答 ' + state.answers.length + ' / 6 <span>·</span> 経過 ' + elapsed + '</p>' +
       '<div class="admin-field"><label for="room-number">現在の部屋番号</label><input id="room-number" inputmode="numeric" maxlength="4" value="' + escapeHtml(state.roomNumber) + '" aria-describedby="room-feedback"></div><p class="inline-feedback" id="room-feedback"></p>' +
       '</section>' +
@@ -583,6 +595,10 @@
     }
     if (route.preview) {
       app.innerHTML = renderNode(route.node, true);
+      return;
+    }
+    if (state.currentNode === "FINAL") {
+      app.innerHTML = renderFinal();
       return;
     }
     if (questions[route.node] && answerFor(route.node)) {
@@ -684,12 +700,17 @@
       answeredOnThisPage = questionId;
       saveState(function (current) {
         current.status = "active";
-        current.expectedNode = nextNode;
+        if (nextNode === "FINAL") {
+          current.currentNode = "FINAL";
+          current.expectedNode = null;
+        } else {
+          current.expectedNode = nextNode;
+        }
         current.answers.push({ node: questionId, choice: choice, choiceText: question.choices[index], isCorrect: isCorrect, nextNode: nextNode, at: Date.now() });
       });
     } else if (action === "confirm-final") {
       const route = routeInfo();
-      if (route.preview || route.node !== "FINAL") return;
+      if (route.preview || state.currentNode !== "FINAL") return;
       saveState(function (current) {
         current.finishConfirmed = true;
         current.status = "finished";

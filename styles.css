@@ -53,6 +53,7 @@ a { color: inherit; }
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 7px; box-shadow: var(--shadow); }
 .player-layout { max-width: 620px; margin: 10px auto 0; }
 .player-panel { padding: clamp(24px, 6vw, 46px); }
+.start-guide { text-align: center; }
 .player-heading { margin: 13px 0 10px; font-family: Georgia, "Yu Mincho", serif; font-size: clamp(27px, 7vw, 40px); font-weight: 500; line-height: 1.25; }
 .player-copy { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.8; }
 .start-ribbon { margin: 25px 0 28px; padding: 14px 16px; border-left: 3px solid var(--lime); background: #f8faef; color: #45514c; font-size: 13px; line-height: 1.75; }
@@ -85,8 +86,11 @@ a { color: inherit; }
 .room-number { margin: 24px 0; color: var(--green-dark); font-family: Georgia, "Yu Mincho", serif; font-size: clamp(52px, 15vw, 76px); letter-spacing: .12em; line-height: 1; text-align: center; }
 .confidence-box { margin: 0 0 22px; padding: 18px; background: #f8faef; text-align: center; }
 .confidence-box p { margin: 0 0 14px; font-size: 16px; font-weight: 700; }
+.confidence-box .confidence-hint { margin: 12px 0 0; color: var(--muted); font-size: 12px; font-weight: 400; line-height: 1.6; }
 .confidence-actions { display: flex; gap: 9px; }
 .confidence-actions button { flex: 1; }
+.answer-result.is-error { border-color: #f0c9bd; background: var(--soft-coral); }
+.answer-result.is-error h2 { color: #923d2c; }
 .confirmation-note { margin-top: 18px; color: var(--muted); font-size: 13px; text-align: center; }
 .admin-message { display: grid; justify-items: start; gap: 7px; margin: 18px 0; }
 .admin-message-meta { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 11px; font-weight: 700; }

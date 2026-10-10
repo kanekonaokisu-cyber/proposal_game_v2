@@ -104,7 +104,11 @@
       startedAt: null,
       stoppedAt: null,
       finishConfirmed: false,
-      questionSettingsVersion: null
+      questionSettingsVersion: null,
+      confidenceYesCount: 0,
+      recoveryNode: null,
+      recoveryError: false,
+      recoveryGuideNode: null
     };
   }
 
@@ -174,6 +178,7 @@
 
   let state = loadState();
   let questions = cloneDefaultQuestions();
+  let startLocation = "エントランス";
   const app = document.getElementById("app");
   let answeredOnThisPage = null;
   const supabaseConfig = window.PROPOSAL_GAME_SUPABASE || {};
@@ -212,9 +217,16 @@
         throw new Error("共有設定のバージョン情報が正しくありません。");
       }
       const updatedQuestions = normalizeQuestions(result.data.questions);
+      if (result.data.questions.startLocation !== undefined &&
+          (typeof result.data.questions.startLocation !== "string" || !result.data.questions.startLocation.trim())) {
+        throw new Error("開始案内の場所設定が正しくありません。");
+      }
       const saved = loadState();
       const settingsChanged = saved.questionSettingsVersion !== version;
       questions = updatedQuestions;
+      startLocation = typeof result.data.questions.startLocation === "string"
+        ? result.data.questions.startLocation.trim()
+        : "エントランス";
       remoteSettingsVersion = version;
       settingsSyncError = "";
       if (settingsChanged) {
@@ -275,10 +287,10 @@
         '<label class="question-field-label" for="question-wrong-destination-' + node + '">誤答時に表示する案内文</label>' +
         '<textarea id="question-wrong-destination-' + node + '" data-question-wrong-destination="' + node + '" maxlength="500" required>' + escapeHtml(question.wrongDestination) + "</textarea></fieldset>";
     }).join("");
-    return '<section class="panel admin-panel"><div class="section-heading"><div><h2>クイズの設定</h2><p>問題文・4つの選択肢・正解・正解/誤答それぞれの行き先と案内文を設定します。DUMMY1/DUMMY2もクイズとして編集できます。保存すると全端末の進行状況をリセットします。</p></div></div>' +
+    return '<section class="panel admin-panel"><div class="section-heading"><div><h2>開始案内・クイズの設定</h2><p>1問目へ誘導する場所と、問題文・選択肢・正解・回答後の行き先を設定します。DUMMY1/DUMMY2も編集できます。保存すると全端末の進行状況をリセットします。</p></div></div>' +
       renderSettingsNotice() +
       (supabaseClient
-        ? '<form id="question-settings-form"><div class="question-settings-grid">' + cards + '</div><button class="primary-button question-save-button" type="submit">設定を保存してゲームをリセット</button><p class="inline-feedback" id="question-settings-feedback" aria-live="polite"></p></form>'
+        ? '<form id="question-settings-form"><label class="admin-field"><span>1問目へ誘導する場所</span><input type="text" maxlength="100" data-start-location value="' + escapeHtml(startLocation) + '" required></label><div class="question-settings-grid">' + cards + '</div><button class="primary-button question-save-button" type="submit">設定を保存してゲームをリセット</button><p class="inline-feedback" id="question-settings-feedback" aria-live="polite"></p></form>'
         : '<p class="admin-note">Supabase を設定すると、ここから問題を編集してプレイヤーのスマートフォンにも反映できます。</p>') +
       "</section>";
   }
@@ -292,6 +304,12 @@
   async function saveQuestionSettings(form) {
     const feedback = document.getElementById("question-settings-feedback");
     const updatedQuestions = cloneDefaultQuestions();
+    const locationField = form.querySelector("[data-start-location]");
+    const updatedStartLocation = locationField ? locationField.value.trim() : "";
+    if (!updatedStartLocation) {
+      if (feedback) feedback.textContent = "1問目へ誘導する場所を入力してください。";
+      return;
+    }
     let missingRouteNode = "";
     Object.keys(defaultQuestions).forEach(function (node) {
       const textField = form.querySelector('[data-question-text="' + node + '"]');
@@ -343,8 +361,9 @@
       return;
     }
     const nextVersion = (remoteSettingsVersion || 0) + 1;
+    const sharedQuestions = { ...validatedQuestions, startLocation: updatedStartLocation };
     const result = await supabaseClient.from("game_settings")
-      .upsert({ id: 1, questions: validatedQuestions, version: nextVersion }, { onConflict: "id" })
+      .upsert({ id: 1, questions: sharedQuestions, version: nextVersion }, { onConflict: "id" })
       .select("questions, version")
       .single();
     if (result.error) {
@@ -355,6 +374,7 @@
     state = { ...freshState(), roomNumber: roomNumber, questionSettingsVersion: result.data.version };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     questions = normalizeQuestions(result.data.questions);
+    startLocation = updatedStartLocation;
     remoteSettingsVersion = result.data.version;
     settingsSyncError = "";
     render();
@@ -417,6 +437,7 @@
   function routeInfo() {
     const route = (window.location.hash || "#/").slice(1);
     if (route === "/admin") return { admin: true };
+    if (route === "/start") return { node: "START", preview: false };
     const match = route.match(/^\/g\/([A-Za-z0-9]{8})(\?preview=1)?$/);
     if (match) {
       const entry = qrEntries[match[1]];
@@ -427,6 +448,13 @@
 
   function answerFor(questionId) {
     return state.answers.find(function (answer) { return answer.node === questionId; });
+  }
+
+  function firstUnresolvedQuestion() {
+    return ["Q1", "Q2", "Q3", "Q4"].find(function (node) {
+      const answer = answerFor(node);
+      return !answer || !answer.isCorrect;
+    }) || null;
   }
 
   function escapeHtml(value) {
@@ -470,12 +498,15 @@
   function renderQuestion(node, preview) {
     const question = questions[node];
     const existing = answerFor(node);
+    const recovery = state.recoveryNode === node;
     const choices = question.choices.map(function (choice, index) {
       const letter = letters[index];
-      return '<li><button class="choice-button" data-action="answer" data-question="' + node + '" data-choice="' + letter + '" ' + (existing || preview ? "disabled" : "") + '><span class="choice-letter">' + letter + '</span><span class="choice-text">' + escapeHtml(choice) + "</span></button></li>";
+      return '<li><button class="choice-button" data-action="answer" data-question="' + node + '" data-choice="' + letter + '" ' + (existing && !recovery || preview ? "disabled" : "") + '><span class="choice-letter">' + letter + '</span><span class="choice-text">' + escapeHtml(choice) + "</span></button></li>";
     }).join("");
     let result = "";
-    if (existing) {
+    if (recovery && state.recoveryError) {
+      result = '<div class="answer-result is-error"><h2>違います…あなたは何も知らないのですね…</h2><p>正しい答えを選ぶまで、もう一度考えてください。</p></div>';
+    } else if (existing && !recovery) {
       const destination = existing.isCorrect
         ? question.destination
         : question.wrongDestination;
@@ -501,6 +532,22 @@
   function renderFinal() {
     const room = /^\d{4}$/.test(state.roomNumber) ? state.roomNumber : "2807";
     const confirmed = state.finishConfirmed;
+    const unresolved = firstUnresolvedQuestion();
+    if (state.expectedNode && state.recoveryGuideNode) {
+      const recoveredQuestion = questions[state.recoveryGuideNode];
+      return '<div class="player-layout"><section class="panel player-panel">' + sharedMessage() +
+        '<h1 class="player-heading">正解です。</h1><p class="player-copy">次の場所へ向かってQRコードを探してください。</p><p class="destination-copy">' + escapeHtml(recoveredQuestion.destination) + "</p></section></div>";
+    }
+    if (unresolved) {
+      const yesCount = Math.max(0, state.confidenceYesCount || 0);
+      return '<div class="player-layout"><section class="panel player-panel">' + sharedMessage() +
+        '<h1 class="player-heading">最後の確認です</h1><div class="confidence-box"><p>' +
+        (yesCount ? "ほんとに？？" : "これまで答えた問題に自信がありますか？") +
+        '</p><div class="confidence-actions"><button class="primary-button" data-action="confidence-yes">YES</button>' +
+        '<button class="secondary-button" data-action="confidence-no">NO</button>' +
+        '</div>' + (yesCount ? '<p class="confidence-hint">自信があるならYES、答えを見直すならNOを押してください。</p>' : "") +
+        "</div></section></div>";
+    }
     return '<div class="player-layout"><section class="panel player-panel">' + sharedMessage() +
       '<h1 class="player-heading">たどり着いた答えは……</h1>' +
       '<div class="room-number" aria-label="部屋番号 ' + room.split("").join(" ") + '">' + room + "</div>" +
@@ -555,7 +602,7 @@
     return '<div class="admin-layout"><div class="admin-main">' +
       '<section class="panel admin-panel"><div class="section-heading"><div><h1>ゲーム進行</h1><p>プレイヤー画面と同じブラウザー保存データを表示しています。</p></div><div class="admin-heading-actions"><span class="status-chip' + statusClass + '">' + statusLabels[state.status] + '</span>' + (adminSession ? '<button class="secondary-button admin-logout-button" data-action="admin-logout">ログアウト</button>' : "") + '</div></div>' +
       '<div><strong>現在のノード：</strong>' + (nodeLabels[current] || current) + '</div>' +
-      '<div><strong>次のQR：</strong>' + (state.currentNode === "FINAL" ? "なし（最終案内を表示中）" : state.expectedNode ? nodeLabels[state.expectedNode] : "案内待ち") + '</div>' + progressMarkup(current) +
+      '<div><strong>次のQR：</strong>' + (state.expectedNode ? nodeLabels[state.expectedNode] : state.currentNode === "FINAL" ? "なし（最終案内を表示中）" : "案内待ち") + '</div>' + progressMarkup(state.currentNode === "FINAL" && state.expectedNode ? state.expectedNode : current) +
       '<p class="progress-caption">回答 ' + state.answers.length + ' / 6 <span>·</span> 経過 ' + elapsed + '</p>' +
       '<div class="admin-field"><label for="room-number">現在の部屋番号</label><input id="room-number" inputmode="numeric" maxlength="4" value="' + escapeHtml(state.roomNumber) + '" aria-describedby="room-feedback"></div><p class="inline-feedback" id="room-feedback"></p>' +
       '</section>' +
@@ -586,7 +633,8 @@
       return;
     }
     if (route.node === "START") {
-      window.location.replace(window.location.pathname + "#/g/" + qrIdForNode("Q1"));
+      app.innerHTML = '<div class="player-layout"><section class="panel player-panel start-guide"><p class="eyebrow">THE LITTLE MYSTERY</p><h1 class="player-heading">' +
+        escapeHtml(startLocation) + 'へ向かってQRコードを探してください</h1></section></div>';
       return;
     }
     if (!route.node) {
@@ -597,7 +645,29 @@
       app.innerHTML = renderNode(route.node, true);
       return;
     }
+    if (state.currentNode === "FINAL" && state.recoveryNode) {
+      app.innerHTML = renderQuestion(state.recoveryNode, false);
+      return;
+    }
     if (state.currentNode === "FINAL") {
+      if (state.expectedNode && state.recoveryGuideNode && route.node !== state.expectedNode) {
+        app.innerHTML = renderFinal();
+        return;
+      }
+      if (state.expectedNode && route.node === state.expectedNode) {
+        state.currentNode = route.node;
+        state.expectedNode = null;
+        state.recoveryGuideNode = null;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      } else if (!state.expectedNode || route.node === "FINAL") {
+        app.innerHTML = renderFinal();
+        return;
+      } else {
+        app.innerHTML = renderUnavailable();
+        return;
+      }
+    }
+    if (route.node === "FINAL") {
       app.innerHTML = renderFinal();
       return;
     }
@@ -621,6 +691,7 @@
       }
       state.currentNode = route.node;
       state.expectedNode = null;
+      state.recoveryGuideNode = null;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     }
     app.innerHTML = renderNode(route.node, false);
@@ -684,7 +755,8 @@
       }
       return;
     }
-    if (["answer", "confirm-final"].includes(action) && ["paused", "stopped", "finished"].includes(state.status)) return;
+    if (["answer", "confirm-final", "confidence-yes", "confidence-no"].includes(action) &&
+        ["paused", "stopped", "finished"].includes(state.status)) return;
 
     if (action === "answer") {
       const questionId = button.dataset.question;
@@ -692,7 +764,9 @@
       const question = questions[questionId];
       const route = routeInfo();
       state = loadState();
-      if (route.preview || !question || route.node !== state.currentNode || answerFor(questionId)) return;
+      const recovery = state.recoveryNode === questionId && state.currentNode === "FINAL";
+      if (route.preview || !question ||
+          (!recovery && (route.node !== state.currentNode || answerFor(questionId)))) return;
       const index = letters.indexOf(choice);
       if (index < 0) return;
       const isCorrect = choice === question.correct;
@@ -700,13 +774,61 @@
       answeredOnThisPage = questionId;
       saveState(function (current) {
         current.status = "active";
-        if (nextNode === "FINAL") {
-          current.currentNode = "FINAL";
-          current.expectedNode = null;
+        if (recovery) {
+          const existing = current.answers.find(function (answer) { return answer.node === questionId; });
+          const updatedAnswer = {
+            node: questionId,
+            choice: choice,
+            choiceText: question.choices[index],
+            isCorrect: isCorrect,
+            nextNode: nextNode,
+            at: Date.now()
+          };
+          if (existing) Object.assign(existing, updatedAnswer);
+          else current.answers.push(updatedAnswer);
+          if (!isCorrect) {
+            current.recoveryError = true;
+            return;
+          }
+          const questionOrder = ["Q1", "Q2", "Q3", "Q4"];
+          const recoveredIndex = questionOrder.indexOf(questionId);
+          current.answers = current.answers.filter(function (answer) {
+            const answerIndex = questionOrder.indexOf(answer.node);
+            return answerIndex >= 0 && answerIndex <= recoveredIndex;
+          });
+          current.recoveryNode = null;
+          current.recoveryError = false;
+          current.confidenceYesCount = 0;
+          current.finishConfirmed = false;
+          if (nextNode === "FINAL") {
+            current.expectedNode = null;
+            current.recoveryGuideNode = null;
+          } else {
+            current.expectedNode = nextNode;
+            current.recoveryGuideNode = questionId;
+          }
         } else {
-          current.expectedNode = nextNode;
+          if (nextNode === "FINAL") {
+            current.currentNode = "FINAL";
+            current.expectedNode = null;
+          } else {
+            current.expectedNode = nextNode;
+          }
+          current.answers.push({ node: questionId, choice: choice, choiceText: question.choices[index], isCorrect: isCorrect, nextNode: nextNode, at: Date.now() });
         }
-        current.answers.push({ node: questionId, choice: choice, choiceText: question.choices[index], isCorrect: isCorrect, nextNode: nextNode, at: Date.now() });
+      });
+    } else if (action === "confidence-yes") {
+      if (routeInfo().preview || state.currentNode !== "FINAL" || !firstUnresolvedQuestion()) return;
+      saveState(function (current) {
+        current.confidenceYesCount = (current.confidenceYesCount || 0) + 1;
+      });
+    } else if (action === "confidence-no") {
+      if (routeInfo().preview || state.currentNode !== "FINAL") return;
+      const unresolved = firstUnresolvedQuestion();
+      if (!unresolved) return;
+      saveState(function (current) {
+        current.recoveryNode = unresolved;
+        current.recoveryError = false;
       });
     } else if (action === "confirm-final") {
       const route = routeInfo();

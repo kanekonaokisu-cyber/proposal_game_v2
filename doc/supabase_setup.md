@@ -19,11 +19,11 @@ The GitHub Pages app is static, so `localStorage` alone cannot share settings wi
 
    The Publishable / `anon` key is public by design. Never put a `secret` or `service_role` key in this file.
 6. Commit and deploy `supabase-config.js`. Open `/#/admin` and sign in with the administrator account.
-7. Edit the question text, four answer choices, correct choice, and the next QR route and player guidance for both correct and incorrect answers, then select **設定を保存してゲームをリセット**. DUMMY1 and DUMMY2 are also editable quiz questions; configure both before players start.
+7. Set the location named in the Q1 guidance, edit the question text, four answer choices, correct choice, and the next QR route and player guidance for both correct and incorrect answers, then select **設定を保存してゲームをリセット**. DUMMY1 and DUMMY2 are also editable quiz questions; configure both before players start.
 
 ## Runtime behavior
 
-- All devices read the same question settings. Open player pages check for changes every 10 seconds and when they return to the foreground.
+- All devices read the same question settings and Q1 guidance location. The location is stored as `startLocation` in the existing settings JSON, so no database migration is needed. Open player pages check for changes every 10 seconds and when they return to the foreground.
 - Saving settings increments the shared version and resets local game progress on each device when it next syncs. Players should restart from the Q1 QR code.
 - Correct- and incorrect-answer routes and player guidance are configured independently using selectable route options. Q1 incorrect answers default to DUMMY1 and Q3 incorrect answers default to DUMMY2. DUMMY1 leads to Q3; after Q4 or DUMMY2 is answered, the final guidance appears immediately without another QR scan.
 - Question settings are shared; individual answer progress remains local to each device.

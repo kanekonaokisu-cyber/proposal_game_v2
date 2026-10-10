@@ -531,7 +531,6 @@
 
   function renderFinal() {
     const room = /^\d{4}$/.test(state.roomNumber) ? state.roomNumber : "2807";
-    const confirmed = state.finishConfirmed;
     const unresolved = firstUnresolvedQuestion();
     if (state.expectedNode && state.recoveryGuideNode) {
       const recoveredQuestion = questions[state.recoveryGuideNode];
@@ -549,11 +548,8 @@
         "</div></section></div>";
     }
     return '<div class="player-layout"><section class="panel player-panel">' + sharedMessage() +
-      '<h1 class="player-heading">たどり着いた答えは……</h1>' +
       '<div class="room-number" aria-label="部屋番号 ' + room.split("").join(" ") + '">' + room + "</div>" +
-      (confirmed
-        ? '<div class="confirmation-note">答えを確かめに、ゴールへ向かいましょう。</div>'
-        : '<div class="confidence-box"><p>この答えに自信がありますか？</p><div class="confidence-actions"><button class="primary-button" data-action="confirm-final">はい</button></div></div>') +
+      '<p class="room-instruction">この部屋番号に来てください。</p>' +
       "</section></div>";
   }
 
@@ -593,6 +589,13 @@
       const image = qrCodeDataUrl(url, 4);
       return '<tr><td><code>' + id + '</code></td><td>' + entry.node + '</td><td>' + entry.purpose + '</td><td class="qr-image-cell"><img class="qr-code-image" src="' + image + '" alt="' + escapeHtml(entry.purpose + "のQRコード") + '" width="128" height="128" loading="lazy"></td><td class="qr-url-cell"><a href="' + url + '" target="_blank" rel="noreferrer">' + escapeHtml(url) + '</a></td><td class="qr-actions"><button class="secondary-button" data-action="copy-qr-image" data-url="' + escapeHtml(url) + '">画像をコピー</button><button class="secondary-button" data-action="copy-qr" data-url="' + escapeHtml(url) + '">URLをコピー</button><a class="secondary-button" href="' + qrUrl(id, true) + '" target="_blank" rel="noreferrer">テスト表示</a><span class="qr-copy-feedback" aria-live="polite"></span></td></tr>';
     }).join("");
+    const startGuideUrl = window.location.origin + window.location.pathname + "#/start";
+    const startGuideQrRow = '<tr><td>—</td><td>START</td><td>1問目への案内</td><td class="qr-image-cell"><img class="qr-code-image" src="' +
+      qrCodeDataUrl(startGuideUrl, 4) + '" alt="1問目への案内ページのQRコード" width="128" height="128" loading="lazy"></td><td class="qr-url-cell"><a href="' +
+      startGuideUrl + '" target="_blank" rel="noreferrer">' + escapeHtml(startGuideUrl) + '</a></td><td class="qr-actions"><button class="secondary-button" data-action="copy-qr-image" data-url="' +
+      escapeHtml(startGuideUrl) + '">画像をコピー</button><button class="secondary-button" data-action="copy-qr" data-url="' +
+      escapeHtml(startGuideUrl) + '">URLをコピー</button><a class="secondary-button" href="' + startGuideUrl +
+      '" target="_blank" rel="noreferrer">表示</a><span class="qr-copy-feedback" aria-live="polite"></span></td></tr>';
     const rows = ["Q1", "Q2", "DUMMY1", "Q3", "DUMMY2", "Q4"].map(function (node) {
       const answer = answerFor(node);
       if (!answer) return '<tr><td>' + node + '</td><td class="result-pending">未回答</td><td>—</td><td>—</td></tr>';
@@ -610,7 +613,7 @@
       '<section class="panel admin-panel"><div class="section-heading"><div><h2>回答履歴</h2><p>選択内容と正誤は管理画面だけに表示されます。</p></div></div>' +
       '<div class="answer-table-wrap"><table class="answer-table"><thead><tr><th>問題</th><th>選択</th><th>判定</th><th>時刻</th></tr></thead><tbody>' + rows + "</tbody></table></div></section>" +
       '<section class="panel admin-panel"><div class="section-heading"><div><h2>QR対応表</h2><p>画像を右クリック（スマートフォンでは長押し）して保存するか、「画像をコピー」で画像をコピーできます。テスト表示は進行状態を変更しません。</p></div></div>' +
-      '<div class="answer-table-wrap"><table class="answer-table qr-table"><thead><tr><th>QR識別子</th><th>内部ノード</th><th>用途</th><th>QR画像</th><th>URL</th><th>操作</th></tr></thead><tbody>' + qrRows + "</tbody></table></div></section>" +
+      '<div class="answer-table-wrap"><table class="answer-table qr-table"><thead><tr><th>QR識別子</th><th>内部ノード</th><th>用途</th><th>QR画像</th><th>URL</th><th>操作</th></tr></thead><tbody>' + startGuideQrRow + qrRows + "</tbody></table></div></section>" +
       '</div><aside class="admin-side">' +
       '<section class="panel admin-panel"><div class="section-heading"><div><h2>プレイヤーへの連絡</h2><p>送信するとプレイヤー画面に反映されます。</p></div></div>' +
       '<div class="admin-field"><label for="admin-message">メッセージ</label><textarea id="admin-message" placeholder="例：ゆっくり進んでね。">' + escapeHtml(state.message) + '</textarea></div><div class="admin-actions"><button class="primary-button" data-action="send-message">メッセージを送信</button><button class="secondary-button" data-action="clear-message">表示を消す</button></div><p class="inline-feedback" id="message-feedback"></p></section>' +
@@ -645,7 +648,7 @@
       app.innerHTML = renderNode(route.node, true);
       return;
     }
-    if (state.currentNode === "FINAL" && state.recoveryNode) {
+    if (state.recoveryNode && (state.currentNode === "FINAL" || route.node === state.recoveryNode)) {
       app.innerHTML = renderQuestion(state.recoveryNode, false);
       return;
     }
@@ -655,10 +658,20 @@
         return;
       }
       if (state.expectedNode && route.node === state.expectedNode) {
+        const arrivedDuringRecovery = Boolean(state.recoveryGuideNode);
         state.currentNode = route.node;
         state.expectedNode = null;
         state.recoveryGuideNode = null;
+        const previousAnswer = answerFor(route.node);
+        if (arrivedDuringRecovery && previousAnswer && !previousAnswer.isCorrect) {
+          state.recoveryNode = route.node;
+          state.recoveryError = false;
+        }
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        if (state.recoveryNode === route.node) {
+          app.innerHTML = renderQuestion(route.node, false);
+          return;
+        }
       } else if (!state.expectedNode || route.node === "FINAL") {
         app.innerHTML = renderFinal();
         return;
@@ -689,9 +702,17 @@
         app.innerHTML = renderUnavailable();
         return;
       }
+      const arrivedDuringRecovery = Boolean(state.recoveryGuideNode);
       state.currentNode = route.node;
       state.expectedNode = null;
       state.recoveryGuideNode = null;
+      if (arrivedDuringRecovery) {
+        const previousAnswer = answerFor(route.node);
+        if (previousAnswer && !previousAnswer.isCorrect) {
+          state.recoveryNode = route.node;
+          state.recoveryError = false;
+        }
+      }
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     }
     app.innerHTML = renderNode(route.node, false);
@@ -764,7 +785,7 @@
       const question = questions[questionId];
       const route = routeInfo();
       state = loadState();
-      const recovery = state.recoveryNode === questionId && state.currentNode === "FINAL";
+      const recovery = state.recoveryNode === questionId;
       if (route.preview || !question ||
           (!recovery && (route.node !== state.currentNode || answerFor(questionId)))) return;
       const index = letters.indexOf(choice);
@@ -790,22 +811,35 @@
             current.recoveryError = true;
             return;
           }
-          const questionOrder = ["Q1", "Q2", "Q3", "Q4"];
-          const recoveredIndex = questionOrder.indexOf(questionId);
-          current.answers = current.answers.filter(function (answer) {
-            const answerIndex = questionOrder.indexOf(answer.node);
-            return answerIndex >= 0 && answerIndex <= recoveredIndex;
-          });
+          current.currentNode = "FINAL";
           current.recoveryNode = null;
           current.recoveryError = false;
           current.confidenceYesCount = 0;
           current.finishConfirmed = false;
-          if (nextNode === "FINAL") {
+          const questionOrder = ["Q1", "Q2", "Q3", "Q4"];
+          let targetNode = nextNode;
+          let guideNode = questionId;
+          while (questionOrder.includes(targetNode)) {
+            const alreadyCorrect = current.answers.find(function (answer) {
+              return answer.node === targetNode && answer.isCorrect;
+            });
+            if (!alreadyCorrect) break;
+            guideNode = targetNode;
+            targetNode = alreadyCorrect.nextNode;
+          }
+          const unresolved = questionOrder.find(function (node) {
+            const answer = current.answers.find(function (item) { return item.node === node; });
+            return !answer || !answer.isCorrect;
+          });
+          if (targetNode === "FINAL" && unresolved) {
+            targetNode = unresolved;
+          }
+          if (targetNode === "FINAL" && !unresolved) {
             current.expectedNode = null;
             current.recoveryGuideNode = null;
           } else {
-            current.expectedNode = nextNode;
-            current.recoveryGuideNode = questionId;
+            current.expectedNode = targetNode;
+            current.recoveryGuideNode = guideNode;
           }
         } else {
           if (nextNode === "FINAL") {

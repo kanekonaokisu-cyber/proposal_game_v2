@@ -877,13 +877,34 @@
             current.recoveryGuideNode = guideNode;
           }
         } else {
-          if (nextNode === "FINAL") {
+          current.answers.push({ node: questionId, choice: choice, choiceText: question.choices[index], isCorrect: isCorrect, nextNode: nextNode, at: Date.now() });
+          const questionOrder = ["Q1", "Q2", "Q3", "Q4"];
+          let targetNode = nextNode;
+          let guideNode = questionId;
+          while (questionOrder.includes(targetNode)) {
+            const alreadyCorrect = current.answers.find(function (answer) {
+              return answer.node === targetNode && answer.isCorrect;
+            });
+            if (!alreadyCorrect) break;
+            guideNode = targetNode;
+            targetNode = alreadyCorrect.nextNode;
+          }
+          const unresolved = questionOrder.find(function (node) {
+            const answer = current.answers.find(function (item) { return item.node === node; });
+            return !answer || !answer.isCorrect;
+          });
+          if (targetNode === "FINAL" && unresolved && nextNode !== "FINAL") targetNode = unresolved;
+          if (targetNode === "FINAL") {
             current.currentNode = "FINAL";
             current.expectedNode = null;
+            current.recoveryGuideNode = null;
+          } else if (targetNode !== nextNode) {
+            current.currentNode = "FINAL";
+            current.expectedNode = targetNode;
+            current.recoveryGuideNode = guideNode;
           } else {
-            current.expectedNode = nextNode;
+            current.expectedNode = targetNode;
           }
-          current.answers.push({ node: questionId, choice: choice, choiceText: question.choices[index], isCorrect: isCorrect, nextNode: nextNode, at: Date.now() });
         }
       });
     } else if (action === "confidence-yes") {

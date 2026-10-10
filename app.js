@@ -106,6 +106,7 @@
       finishConfirmed: false,
       questionSettingsVersion: null,
       confidenceYesCount: 0,
+      roomNumberRevealed: false,
       recoveryNode: null,
       recoveryError: false,
       recoveryGuideNode: null
@@ -457,6 +458,24 @@
     }) || null;
   }
 
+  function advancePastCorrectAnswers(node) {
+    const questionOrder = ["Q1", "Q2", "Q3", "Q4"];
+    let targetNode = answerFor(node).nextNode;
+    let guideNode = node;
+    while (questionOrder.includes(targetNode)) {
+      const answer = answerFor(targetNode);
+      if (!answer || !answer.isCorrect) break;
+      guideNode = targetNode;
+      targetNode = answer.nextNode;
+    }
+    const unresolved = firstUnresolvedQuestion();
+    if (targetNode === "FINAL" && unresolved) targetNode = unresolved;
+    state.currentNode = "FINAL";
+    state.expectedNode = targetNode === "FINAL" && !unresolved ? null : targetNode;
+    state.recoveryGuideNode = state.expectedNode ? guideNode : null;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
+
   function escapeHtml(value) {
     return String(value).replace(/[&<>"']/g, function (character) {
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[character];
@@ -548,8 +567,11 @@
         "</div></section></div>";
     }
     return '<div class="player-layout"><section class="panel player-panel">' + sharedMessage() +
-      '<div class="room-number" aria-label="部屋番号 ' + room.split("").join(" ") + '">' + room + "</div>" +
-      '<p class="room-instruction">この部屋番号に来てください。</p>' +
+      '<p class="room-instruction">集めたQRコードの裏面にある「アルファベット＋数字」を確認してください。アルファベット順に並べると、部屋番号になります。</p>' +
+      (state.roomNumberRevealed
+        ? '<div class="room-number" aria-label="部屋番号 ' + room.split("").join(" ") + '">' + room + "</div>" +
+          '<p class="room-instruction">この部屋番号に来てください。</p>'
+        : '<button class="room-rescue-button" data-action="reveal-room-number">QRコードをなくしてしまったらこちら</button>') +
       "</section></div>";
   }
 
@@ -652,6 +674,12 @@
       app.innerHTML = renderQuestion(state.recoveryNode, false);
       return;
     }
+    const routeAnswer = answerFor(route.node);
+    if (questions[route.node] && state.expectedNode === route.node && routeAnswer && routeAnswer.isCorrect) {
+      advancePastCorrectAnswers(route.node);
+      app.innerHTML = renderFinal();
+      return;
+    }
     if (state.currentNode === "FINAL") {
       if (state.expectedNode && state.recoveryGuideNode && route.node !== state.expectedNode) {
         app.innerHTML = renderFinal();
@@ -684,7 +712,10 @@
       app.innerHTML = renderFinal();
       return;
     }
-    if (questions[route.node] && answerFor(route.node)) {
+    const previousAnswer = answerFor(route.node);
+    const expectedIncorrectAnswer = state.expectedNode === route.node &&
+      previousAnswer && !previousAnswer.isCorrect;
+    if (questions[route.node] && previousAnswer && !expectedIncorrectAnswer) {
       app.innerHTML = answeredOnThisPage === route.node
         ? renderAnswerResult(route.node)
         : renderAlreadyAnswered();
@@ -702,16 +733,13 @@
         app.innerHTML = renderUnavailable();
         return;
       }
-      const arrivedDuringRecovery = Boolean(state.recoveryGuideNode);
       state.currentNode = route.node;
       state.expectedNode = null;
       state.recoveryGuideNode = null;
-      if (arrivedDuringRecovery) {
-        const previousAnswer = answerFor(route.node);
-        if (previousAnswer && !previousAnswer.isCorrect) {
-          state.recoveryNode = route.node;
-          state.recoveryError = false;
-        }
+      const previousAnswer = answerFor(route.node);
+      if (previousAnswer && !previousAnswer.isCorrect) {
+        state.recoveryNode = route.node;
+        state.recoveryError = false;
       }
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     }
@@ -779,7 +807,12 @@
     if (["answer", "confirm-final", "confidence-yes", "confidence-no"].includes(action) &&
         ["paused", "stopped", "finished"].includes(state.status)) return;
 
-    if (action === "answer") {
+    if (action === "reveal-room-number") {
+      if (routeInfo().preview || state.currentNode !== "FINAL" || firstUnresolvedQuestion()) return;
+      saveState(function (current) {
+        current.roomNumberRevealed = true;
+      });
+    } else if (action === "answer") {
       const questionId = button.dataset.question;
       const choice = button.dataset.choice;
       const question = questions[questionId];

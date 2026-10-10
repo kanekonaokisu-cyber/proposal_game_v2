@@ -70,7 +70,7 @@ The exact room number is unknown until day-of check-in. Known constraints: expec
 
 The exact room number must be runtime configuration, not hard-coded.
 
-Example: room 2807 → digits 2, 8, 0, 7.
+Example: room 2812 → digits 2, 8, 1, 2.
 
 ## 11. Final Number Mechanism
 
@@ -80,7 +80,7 @@ The physical implementation of where the digits appear is flexible, e.g. a small
 
 ## 12. Final Confirmation
 
-After the final guidance appears, show the assembled room number and ask for confidence, e.g. “あなたが導き出した答えは……2807。この答えに、自信がありますか？”
+After the final guidance appears, show the assembled room number and ask for confidence, e.g. “あなたが導き出した答えは……2812。この答えに、自信がありますか？”
 
 If the result is wrong, the administrator should be able to identify which main question was answered incorrectly and decide how to intervene. Do not automatically reveal the answer.
 
@@ -153,7 +153,7 @@ Do not invent unnecessary features.
 
 ## 20. Sample Development Data
 
-Use fictional room number 2807 during development.
+Use room number 2812 for the current game.
 
 Example graph:
 

@@ -2,6 +2,7 @@
   "use strict";
 
   const STORAGE_KEY = "proposal-game-prototype-v1";
+  const DEFAULT_ROOM_NUMBER = "2812";
   const letters = ["A", "B", "C", "D"];
   const nodeLabels = {
     START: "QR待ち",
@@ -98,7 +99,7 @@
       status: "ready",
       currentNode: "START",
       expectedNode: null,
-      roomNumber: "2807",
+      roomNumber: DEFAULT_ROOM_NUMBER,
       answers: [],
       message: "",
       startedAt: null,
@@ -169,6 +170,7 @@
       return {
         ...freshState(),
         ...saved,
+        roomNumber: saved.roomNumber === "2807" ? DEFAULT_ROOM_NUMBER : saved.roomNumber,
         answers: Array.isArray(saved.answers) ? saved.answers : [],
         questionSettingsVersion: Number.isInteger(saved.questionSettingsVersion) ? saved.questionSettingsVersion : null
       };
@@ -549,7 +551,7 @@
   }
 
   function renderFinal() {
-    const room = /^\d{4}$/.test(state.roomNumber) ? state.roomNumber : "2807";
+    const room = /^\d{4}$/.test(state.roomNumber) ? state.roomNumber : DEFAULT_ROOM_NUMBER;
     const unresolved = firstUnresolvedQuestion();
     if (state.expectedNode && state.recoveryGuideNode) {
       const recoveredQuestion = questions[state.recoveryGuideNode];
